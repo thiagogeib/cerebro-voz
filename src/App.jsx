@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from "react";
+import { speakElevenLabs, ELEVEN_VOICES } from "./useTTS";
 
 // ─── ÁRVORE BÁSICO / INTERMEDIÁRIO ───────────────────────────────────────────
 const TREE = {
@@ -100,21 +101,7 @@ function getSugestoes(historico, context) {
   return [...base, ...recentes].slice(0, 5);
 }
 
-// ─── TTS ─────────────────────────────────────────────────────────────────────
-function speakWithVoice(text, voiceName) {
-  try {
-    if (!("speechSynthesis" in window)) return false;
-    window.speechSynthesis.cancel();
-    const utt = new SpeechSynthesisUtterance(text);
-    utt.lang = "pt-BR"; utt.rate = 0.82; utt.pitch = 1;
-    const voices = window.speechSynthesis.getVoices();
-    const found = voiceName ? voices.find(v => v.name === voiceName) : null;
-    const pt = found || voices.find(v => v.lang === "pt-BR") || voices.find(v => v.lang.startsWith("pt"));
-    if (pt) utt.voice = pt;
-    window.speechSynthesis.speak(utt);
-    return true;
-  } catch { return false; }
-}
+// TTS via ElevenLabs (ver useTTS.js)
 
 const NIVEIS = [
   { id: "basico",        label: "Básico",        icon: "🟢", desc: "Botões grandes, só necessidades essenciais" },
@@ -133,7 +120,7 @@ export default function App() {
   const [context, setContext] = useState(() => { try { return localStorage.getItem("voz_ctx") || ""; } catch { return ""; } });
   const [ctxDraft, setCtxDraft] = useState("");
   const [voices, setVoices] = useState([]);
-  const [selectedVoice, setSelectedVoice] = useState(() => { try { return localStorage.getItem("voz_voice") || ""; } catch { return ""; } });
+  const [selectedVoice, setSelectedVoice] = useState(() => { try { return localStorage.getItem("voz_voice") || ELEVEN_VOICES[0].id; } catch { return ELEVEN_VOICES[0].id; } });
   const [testingVoice, setTestingVoice] = useState("");
 
   // Avançado
@@ -145,12 +132,8 @@ export default function App() {
   const [sugestoes, setSugestoes] = useState([]);
 
   useEffect(() => {
-    function load() {
-      const all = window.speechSynthesis?.getVoices() || [];
-      setVoices([...all.filter(v => v.lang.startsWith("pt")), ...all.filter(v => !v.lang.startsWith("pt"))]);
-    }
-    load();
-    if ("speechSynthesis" in window) window.speechSynthesis.onvoiceschanged = load;
+    // Usa vozes do ElevenLabs
+    setVoices(ELEVEN_VOICES);
   }, []);
 
   useEffect(() => {
@@ -180,7 +163,7 @@ export default function App() {
       } catch {}
     }
 
-    speakWithVoice(frase, selectedVoice);
+    speakElevenLabs(frase, selectedVoice);
     const spoken = { ...node, frase };
     setLastSpoken(spoken);
 
@@ -217,7 +200,7 @@ export default function App() {
       const text = data?.content?.[0]?.text?.trim();
       if (text) {
         const node = { e: "✍️", l: fragmento, frase: text };
-        speakWithVoice(text, selectedVoice);
+        speakElevenLabs(text, selectedVoice);
         setLastSpoken(node);
         setHistorico(h => {
           const novo = [...h, node].slice(-20);
@@ -253,7 +236,7 @@ export default function App() {
       <div style={s.header}>
         <span style={s.logo}>voz<span style={s.dot}>.</span></span>
         <span style={s.badge}>{nivelInfo.icon} {nivelInfo.label}</span>
-        {lastSpoken && <button style={s.replayBtn} onClick={() => speakWithVoice(lastSpoken.frase, selectedVoice)}>🔊</button>}
+        {lastSpoken && <button style={s.replayBtn} onClick={() => speakElevenLabs(lastSpoken.frase, selectedVoice)}>🔊</button>}
         <button style={s.cfgBtn} onClick={() => { setCtxDraft(context); setFavDraft(favoritas); setShowConfig(true); }}>⚙️</button>
       </div>
 
@@ -410,7 +393,7 @@ export default function App() {
                           </div>
                           {selectedVoice === v.name && <span style={{ color: "#5B7B6F", fontWeight: 700, marginRight: 8 }}>✓</span>}
                           <button style={{ ...s.voiceTestBtn, ...(testingVoice === v.name ? { background: "#C4956A" } : {}) }}
-                            onClick={e => { e.stopPropagation(); setTestingVoice(v.name); speakWithVoice("Olá, estou me sentindo bem hoje.", v.name); setTimeout(() => setTestingVoice(""), 3000); }}>
+                            onClick={e => { e.stopPropagation(); setTestingVoice(v.name); speakElevenLabs("Olá, estou me sentindo bem hoje.", v.name); setTimeout(() => setTestingVoice(""), 3000); }}>
                             {testingVoice === v.name ? "⏸" : "▶"}
                           </button>
                         </div>
