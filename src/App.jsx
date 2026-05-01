@@ -128,7 +128,7 @@ export default function App() {
   const [favDraft, setFavDraft] = useState([]);
   const [historico, setHistorico] = useState(() => { try { return JSON.parse(localStorage.getItem("voz_historico") || "[]"); } catch { return []; } });
   const [fragmento, setFragmento] = useState("");
-  const [aiLoading, setAiLoading] = useState(false);
+
   const [sugestoes, setSugestoes] = useState([]);
 
   useEffect(() => {
@@ -184,32 +184,17 @@ export default function App() {
     if (node.frase) falarFrase(node);
   }, [speaking, falarFrase]);
 
-  const gerarDoFragmento = async () => {
-    if (!fragmento.trim() || aiLoading) return;
-    setAiLoading(true);
-    try {
-      const ctx = context.trim() ? `Contexto pessoal: ${context}\n` : "";
-      const prompt = `${ctx}A pessoa com afasia escreveu o fragmento: "${fragmento}"\nComplete em uma frase natural na 1ª pessoa (máx 20 palavras). Só a frase, sem aspas.`;
-      const res = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "anthropic-dangerous-direct-browser-access": "true" },
-        body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 80, messages: [{ role: "user", content: prompt }] }),
-      });
-      const data = await res.json();
-      const text = data?.content?.[0]?.text?.trim();
-      if (text) {
-        const node = { e: "✍️", l: fragmento, frase: text };
-        speakElevenLabs(text, selectedVoice);
-        setLastSpoken(node);
-        setHistorico(h => {
-          const novo = [...h, node].slice(-20);
-          try { localStorage.setItem("voz_historico", JSON.stringify(novo)); } catch {}
-          return novo;
-        });
-        setFragmento("");
-      }
-    } catch {}
-    setAiLoading(false);
+  const gerarDoFragmento = () => {
+    if (!fragmento.trim()) return;
+    const node = { e: "✍️", l: fragmento, frase: fragmento };
+    speakElevenLabs(fragmento, selectedVoice);
+    setLastSpoken(node);
+    setHistorico(h => {
+      const novo = [...h, node].slice(-20);
+      try { localStorage.setItem("voz_historico", JSON.stringify(novo)); } catch {}
+      return novo;
+    });
+    setFragmento("");
   };
 
   const saveConfig = () => {
@@ -280,21 +265,21 @@ export default function App() {
 
           {/* FRAGMENTO LIVRE */}
           <div style={s.section}>
-            <div style={s.sectionTitle}>✍️ Escreva um fragmento</div>
+            <div style={s.sectionTitle}>✍️ Digite e fale</div>
             <div style={s.fragmentoRow}>
               <input
                 style={s.fragmentoInput}
                 value={fragmento}
                 onChange={e => setFragmento(e.target.value)}
-                placeholder="Ex: quero tomar, sinto dor..."
+                placeholder="Digite a frase completa e toque →"
                 onKeyDown={e => e.key === "Enter" && gerarDoFragmento()}
               />
               <button
-                style={{ ...s.fragmentoBtn, ...(aiLoading ? { opacity: 0.6 } : {}) }}
+                style={s.fragmentoBtn}
                 onClick={gerarDoFragmento}
-                disabled={aiLoading || !fragmento.trim()}
+                disabled={!fragmento.trim()}
               >
-                {aiLoading ? "⏳" : "→"}
+                →
               </button>
             </div>
           </div>
