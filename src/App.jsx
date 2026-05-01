@@ -153,7 +153,7 @@ export default function App() {
         const prompt = `AAC para pessoa com afasia. Contexto pessoal: ${context}\nFrase base: "${frase}"\nReescreva de forma pessoal e natural (máx 20 palavras, 1ª pessoa). Só a frase, sem aspas.`;
         const res = await fetch("https://api.anthropic.com/v1/messages", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", "anthropic-dangerous-direct-browser-access": "true" },
           body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 80, messages: [{ role: "user", content: prompt }] }),
         });
         const data = await res.json();
@@ -192,7 +192,7 @@ export default function App() {
       const prompt = `${ctx}A pessoa com afasia escreveu o fragmento: "${fragmento}"\nComplete em uma frase natural na 1ª pessoa (máx 20 palavras). Só a frase, sem aspas.`;
       const res = await fetch("https://api.anthropic.com/v1/messages", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "anthropic-dangerous-direct-browser-access": "true" },
         body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 80, messages: [{ role: "user", content: prompt }] }),
       });
       const data = await res.json();
