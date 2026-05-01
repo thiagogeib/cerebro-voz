@@ -109,6 +109,65 @@ const NIVEIS = [
   { id: "avancado",      label: "Avançado",       icon: "🔴", desc: "Favoritas, predição por horário e escrita livre" },
 ];
 
+
+// ─── ESCALA DE DOR ────────────────────────────────────────────────────────────
+function PainScale({ onSelect, speaking }) {
+  const levels = [
+    { n: 0,  color: "#4CAF50", label: "Sem dor",       frase: "Não estou sentindo dor agora." },
+    { n: 1,  color: "#8BC34A", label: "Mínima",         frase: "Estou com uma dor mínima, quase nada." },
+    { n: 2,  color: "#CDDC39", label: "Leve",           frase: "Estou com uma dor leve." },
+    { n: 3,  color: "#FFEB3B", label: "Leve",           frase: "Estou com uma dor leve, mas percebo ela." },
+    { n: 4,  color: "#FFC107", label: "Moderada",       frase: "Estou com uma dor moderada." },
+    { n: 5,  color: "#FF9800", label: "Moderada",       frase: "Estou com uma dor moderada, está me incomodando." },
+    { n: 6,  color: "#FF7043", label: "Forte",          frase: "Estou com uma dor forte." },
+    { n: 7,  color: "#F44336", label: "Intensa",        frase: "Estou com uma dor intensa, preciso de ajuda." },
+    { n: 8,  color: "#E53935", label: "Muito intensa",  frase: "Estou com uma dor muito intensa." },
+    { n: 9,  color: "#C62828", label: "Insuportável",   frase: "Estou com uma dor insuportável, preciso de socorro." },
+    { n: 10, color: "#B71C1C", label: "Máxima",         frase: "Estou com dor no nível máximo, é uma emergência!" },
+  ];
+
+  return (
+    <div style={{ marginBottom: 16 }}>
+      <div style={{ fontSize: 11, fontWeight: 700, color: "#8A7D6A", textTransform: "uppercase", letterSpacing: 1, marginBottom: 10 }}>
+        📊 Nível de dor — toque para falar
+      </div>
+      <div style={{ display: "flex", gap: 4, marginBottom: 8 }}>
+        {levels.map(l => (
+          <button
+            key={l.n}
+            disabled={speaking}
+            onClick={() => onSelect(l)}
+            style={{
+              flex: 1,
+              height: 44,
+              background: l.color,
+              border: "none",
+              borderRadius: 8,
+              color: l.n <= 2 ? "#2C2416" : "white",
+              fontSize: 14,
+              fontWeight: 700,
+              cursor: speaking ? "not-allowed" : "pointer",
+              opacity: speaking ? 0.5 : 1,
+              transition: "transform 0.1s",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+            onTouchStart={e => { if (!speaking) e.currentTarget.style.transform = "scale(0.9)"; }}
+            onTouchEnd={e => { e.currentTarget.style.transform = "scale(1)"; }}
+          >
+            {l.n}
+          </button>
+        ))}
+      </div>
+      <div style={{ display: "flex", justifyContent: "space-between" }}>
+        <span style={{ fontSize: 10, color: "#8A7D6A" }}>😊 Sem dor</span>
+        <span style={{ fontSize: 10, color: "#8A7D6A" }}>😱 Dor máxima</span>
+      </div>
+    </div>
+  );
+}
+
 // ─── APP ─────────────────────────────────────────────────────────────────────
 export default function App() {
   const [nivel, setNivel] = useState(() => { try { return localStorage.getItem("voz_nivel") || "basico"; } catch { return "basico"; } });
@@ -310,7 +369,12 @@ export default function App() {
             </div>
           )}
           <div style={s.wordsArea}>
-            <div style={{ display: "grid", gridTemplateColumns: `repeat(${GRID_COLS}, 1fr)`, gap: 10 }}>
+            {stack.length > 0 && stack[stack.length - 1].id === "dor" && (
+            <PainScale speaking={speaking} onSelect={(level) => {
+              falarFrase({ e: "😣", l: `Dor ${level.n}`, frase: level.frase });
+            }} />
+          )}
+          <div style={{ display: "grid", gridTemplateColumns: `repeat(${GRID_COLS}, 1fr)`, gap: 10 }}>
               {currentNodes?.map((node, i) => (
                 <button
                   key={node.id || i}
