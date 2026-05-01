@@ -1,5 +1,3 @@
-// ─── ElevenLabs TTS ───────────────────────────────────────────────────────────
-// Vozes configuradas — troque os IDs se quiser adicionar mais
 export const ELEVEN_VOICES = [
   { id: "Qrdut83w0Cr152Yb4Xn3", label: "Voz 1" },
   { id: "oArP4WehPe3qjqvCwHNo", label: "Voz 2" },
@@ -9,60 +7,65 @@ export const ELEVEN_VOICES = [
 ];
 
 const ELEVEN_API_KEY = import.meta.env.VITE_ELEVEN_KEY || "";
-const MODEL_ID = "eleven_multilingual_v2";
 
 let currentAudio = null;
 
 export async function speakElevenLabs(text, voiceId) {
-  // Para qualquer áudio anterior
   if (currentAudio) {
     currentAudio.pause();
+    URL.revokeObjectURL(currentAudio.src);
     currentAudio = null;
   }
 
   if (!ELEVEN_API_KEY || !voiceId) {
+    console.warn("ElevenLabs: chave ou voiceId ausente, usando fallback");
     return fallbackSpeak(text);
   }
 
   try {
-    const res = await fetch(
-      `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`,
+    const response = await fetch(
+      `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}/stream`,
       {
         method: "POST",
         headers: {
-          "xi-api-key": ELEVEN_API_KEY,
+          "Accept": "audio/mpeg",
           "Content-Type": "application/json",
+          "xi-api-key": ELEVEN_API_KEY,
         },
         body: JSON.stringify({
           text,
-          model_id: MODEL_ID,
+          model_id: "eleven_multilingual_v2",
           voice_settings: {
             stability: 0.5,
             similarity_boost: 0.75,
-            style: 0.0,
-            use_speaker_boost: true,
           },
         }),
       }
     );
 
-    if (!res.ok) {
-      console.warn("ElevenLabs erro:", res.status);
+    if (!response.ok) {
+      const err = await response.text();
+      console.warn("ElevenLabs erro:", response.status, err);
       return fallbackSpeak(text);
     }
 
-    const blob = await res.blob();
+    const arrayBuffer = await response.arrayBuffer();
+    const blob = new Blob([arrayBuffer], { type: "audio/mpeg" });
     const url = URL.createObjectURL(blob);
+
     currentAudio = new Audio(url);
-    currentAudio.play();
+    currentAudio.onended = () => {
+      URL.revokeObjectURL(url);
+      currentAudio = null;
+    };
+    await currentAudio.play();
     return true;
   } catch (e) {
-    console.warn("ElevenLabs falhou, usando fallback:", e);
+    console.warn("ElevenLabs falhou:", e.message);
     return fallbackSpeak(text);
   }
 }
 
-// Fallback pra Web Speech API se ElevenLabs falhar
 function fallbackSpeak(text) {
   try {
     if (!("speechSynthesis" in window)) return false;
