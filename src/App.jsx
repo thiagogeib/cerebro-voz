@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import { speakElevenLabs, ELEVEN_VOICES } from "./useTTS";
 
-// ─── ÁRVORE BÁSICO / INTERMEDIÁRIO ───────────────────────────────────────────
+// ─── ÁRVORE BÁSICO / INTERMEDIÁRIO ─────────────────────────────────────────── v2
 const TREE = {
   basico: [
     { id: "sede", e: "💧", l: "Sede", filhos: [
@@ -385,16 +385,16 @@ export default function App() {
                 {voices.length === 0
                   ? <div style={s.noVoices}>Abra no Chrome para ter vozes em pt-BR.</div>
                   : <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 300, overflowY: "auto" }}>
-                      {voices.map(v => (
-                        <div key={v.name} style={{ ...s.voiceItem, ...(selectedVoice === v.name ? s.voiceSelected : {}) }} onClick={() => setSelectedVoice(v.name)}>
+                      {ELEVEN_VOICES.map(v => (
+                        <div key={v.id} style={{ ...s.voiceItem, ...(selectedVoice === v.id ? s.voiceSelected : {}) }} onClick={() => setSelectedVoice(v.id)}>
                           <div style={{ flex: 1 }}>
-                            <div style={{ fontSize: 13, fontWeight: 500 }}>{v.name}</div>
-                            <div style={{ fontSize: 11, color: "#8A7D6A" }}>{v.lang}</div>
+                            <div style={{ fontSize: 15, fontWeight: 700, color: "#2C2416" }}>🎙️ {v.label}</div>
+                            <div style={{ fontSize: 11, color: "#8A7D6A", marginTop: 2 }}>ElevenLabs · Toque ▶ para ouvir</div>
                           </div>
-                          {selectedVoice === v.name && <span style={{ color: "#5B7B6F", fontWeight: 700, marginRight: 8 }}>✓</span>}
-                          <button style={{ ...s.voiceTestBtn, ...(testingVoice === v.name ? { background: "#C4956A" } : {}) }}
-                            onClick={e => { e.stopPropagation(); setTestingVoice(v.name); speakElevenLabs("Olá, estou me sentindo bem hoje.", v.name); setTimeout(() => setTestingVoice(""), 3000); }}>
-                            {testingVoice === v.name ? "⏸" : "▶"}
+                          {selectedVoice === v.id && <span style={{ color: "#5B7B6F", fontWeight: 700, marginRight: 8, fontSize: 18 }}>✓</span>}
+                          <button style={{ ...s.voiceTestBtn, ...(testingVoice === v.id ? { background: "#C4956A" } : {}) }}
+                            onClick={e => { e.stopPropagation(); setTestingVoice(v.id); speakElevenLabs("Olá, estou me sentindo bem hoje.", v.id); setTimeout(() => setTestingVoice(""), 4000); }}>
+                            {testingVoice === v.id ? "⏸" : "▶"}
                           </button>
                         </div>
                       ))}
