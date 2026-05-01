@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from "react";
-import { speakElevenLabs, getAvailableVoices, loadVoices } from "./useTTS";
+import { speakElevenLabs, ELEVEN_VOICES, loadVoices } from "./useTTS";
 
 // ─── ÁRVORE BÁSICO / INTERMEDIÁRIO ─────────────────────────────────────────── v2
 const TREE = {
@@ -120,7 +120,7 @@ export default function App() {
   const [context, setContext] = useState(() => { try { return localStorage.getItem("voz_ctx") || ""; } catch { return ""; } });
   const [ctxDraft, setCtxDraft] = useState("");
   const [voices, setVoices] = useState([]);
-  const [selectedVoice, setSelectedVoice] = useState(() => { try { return localStorage.getItem("voz_voice") || ""; } catch { return ""; } });
+  const [selectedVoice, setSelectedVoice] = useState(() => { try { return localStorage.getItem("voz_voice") || ELEVEN_VOICES[0]?.id || ""; } catch { return ""; } });
   const [testingVoice, setTestingVoice] = useState("");
 
   // Avançado
@@ -132,10 +132,7 @@ export default function App() {
   const [sugestoes, setSugestoes] = useState([]);
 
   useEffect(() => {
-    loadVoices().then(() => {
-      const available = getAvailableVoices();
-      setVoices(available);
-    });
+    setVoices(ELEVEN_VOICES);
   }, []);
 
   useEffect(() => {
