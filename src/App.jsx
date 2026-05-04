@@ -277,10 +277,25 @@ export default function App() {
     <div style={s.root}>
       {/* HEADER */}
       <div style={s.header}>
-        <div style={{display:"flex",flexDirection:"column",lineHeight:1.1}}><span style={s.logo}>Vicente<span style={s.dot}>.</span></span><span style={{fontSize:10,color:"#8A7D6A",fontFamily:"'DM Sans',sans-serif",fontWeight:500,letterSpacing:0.5}}>seu assistente de voz</span></div>
-        <span style={s.badge}>{nivelInfo.icon} {nivelInfo.label}</span>
-        {lastSpoken && <button style={s.replayBtn} onClick={() => speakElevenLabs(lastSpoken.frase, selectedVoice)}>🔊</button>}
-        <button style={s.cfgBtn} onClick={() => { setCtxDraft(context); setFavDraft(favoritas); setShowConfig(true); }}>⚙️</button>
+        <div style={{display:"flex",flexDirection:"column",lineHeight:1.2,flex:1}}>
+          <span style={s.logo}>Vicente<span style={s.dot}>.</span></span>
+          <span style={{fontSize:10,color:"#8A7D6A",fontFamily:"'DM Sans',sans-serif",fontWeight:500,letterSpacing:0.3}}>seu assistente de voz</span>
+        </div>
+        <div style={{display:"flex",alignItems:"center",gap:8}}>
+          <span
+            style={{...s.badge, cursor:"pointer"}}
+            onClick={() => { setCtxDraft(context); setFavDraft(favoritas); setShowConfig(true); setConfigTab("nivel"); }}
+          >{nivelInfo.icon} {nivelInfo.label}</span>
+          {lastSpoken && <button style={s.replayBtn} onClick={() => speakElevenLabs(lastSpoken.frase, selectedVoice)}>🔊</button>}
+          <button
+            style={s.cfgBtn}
+            onClick={() => { setCtxDraft(context); setFavDraft(favoritas); setShowConfig(true); setConfigTab("voz"); }}
+          >🎙️</button>
+          <button
+            style={s.cfgBtn}
+            onClick={() => { setCtxDraft(context); setFavDraft(favoritas); setShowConfig(true); setConfigTab("nivel"); }}
+          >⚙️</button>
+        </div>
       </div>
 
       {/* ÚLTIMA FRASE */}
