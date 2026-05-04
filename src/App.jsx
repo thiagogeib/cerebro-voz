@@ -277,7 +277,7 @@ export default function App() {
     <div style={s.root}>
       {/* HEADER */}
       <div style={s.header}>
-        <span style={s.logo}>voz<span style={s.dot}>.</span></span>
+        <div style={{display:"flex",flexDirection:"column",lineHeight:1.1}}><span style={s.logo}>Vicente<span style={s.dot}>.</span></span><span style={{fontSize:10,color:"#8A7D6A",fontFamily:"'DM Sans',sans-serif",fontWeight:500,letterSpacing:0.5}}>seu assistente de voz</span></div>
         <span style={s.badge}>{nivelInfo.icon} {nivelInfo.label}</span>
         {lastSpoken && <button style={s.replayBtn} onClick={() => speakElevenLabs(lastSpoken.frase, selectedVoice)}>🔊</button>}
         <button style={s.cfgBtn} onClick={() => { setCtxDraft(context); setFavDraft(favoritas); setShowConfig(true); }}>⚙️</button>
@@ -309,18 +309,7 @@ export default function App() {
             </div>
           )}
 
-          {/* SUGERIDAS */}
-          <div style={s.section}>
-            <div style={s.sectionTitle}>🔮 Sugeridas agora</div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              {sugestoes.map((s2, i) => (
-                <button key={i} style={s.sugestaoBtn} onClick={() => falarFrase(s2)} disabled={speaking}>
-                  <span style={{ fontSize: 20, flexShrink: 0 }}>{s2.e}</span>
-                  <span style={s.sugestaoText}>{s2.frase}</span>
-                </button>
-              ))}
-            </div>
-          </div>
+
 
           {/* FRAGMENTO LIVRE */}
           <div style={s.section}>
@@ -338,7 +327,7 @@ export default function App() {
                 onClick={gerarDoFragmento}
                 disabled={!fragmento.trim()}
               >
-                →
+                📢
               </button>
             </div>
           </div>
