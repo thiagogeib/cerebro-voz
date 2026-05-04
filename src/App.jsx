@@ -227,7 +227,9 @@ export default function App() {
 
     // Salva no histórico
     setHistorico(h => {
-      const novo = [...h, spoken].slice(-20);
+      // Remove duplicatas da mesma frase, mantém só a mais recente
+      const semDup = h.filter(item => item.frase !== spoken.frase);
+      const novo = [...semDup, spoken].slice(-20);
       try { localStorage.setItem("voz_historico", JSON.stringify(novo)); } catch {}
       return novo;
     });
@@ -249,7 +251,8 @@ export default function App() {
     speakElevenLabs(fragmento, selectedVoice);
     setLastSpoken(node);
     setHistorico(h => {
-      const novo = [...h, node].slice(-20);
+      const semDup = h.filter(item => item.frase !== node.frase);
+      const novo = [...semDup, node].slice(-20);
       try { localStorage.setItem("voz_historico", JSON.stringify(novo)); } catch {}
       return novo;
     });
