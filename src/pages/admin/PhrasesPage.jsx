@@ -32,6 +32,7 @@ export default function PhrasesPage() {
   const [phrases, setPhrases] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [deleting, setDeleting] = useState(null)
 
   useEffect(() => {
     async function load() {
@@ -51,6 +52,21 @@ export default function PhrasesPage() {
     }
     load()
   }, [period])
+
+  async function handleDelete(item) {
+    if (!window.confirm(`Apagar todos os registros de "${item.label}"?`)) return
+    setDeleting(item.label)
+    const { error: err } = await supabase
+      .from('usage_events')
+      .delete()
+      .or(`phrase_label.eq.${item.label},and(phrase_label.is.null,phrase_text.eq.${item.label})`)
+    setDeleting(null)
+    if (err) {
+      alert('Erro ao apagar: ' + err.message)
+      return
+    }
+    setPhrases(prev => prev.filter(p => p.label !== item.label))
+  }
 
   const maxCount = phrases[0]?.count ?? 1
 
@@ -98,6 +114,14 @@ export default function PhrasesPage() {
                 </div>
               </div>
               <span style={s.count}>{item.count}</span>
+              <button
+                onClick={() => handleDelete(item)}
+                disabled={deleting === item.label}
+                style={s.btnDelete}
+                title="Apagar registros desta frase"
+              >
+                {deleting === item.label ? '...' : '✕'}
+              </button>
             </div>
           ))}
         </div>
@@ -210,5 +234,21 @@ const s = {
     flexShrink: 0,
     width: 36,
     textAlign: 'right',
+  },
+  btnDelete: {
+    flexShrink: 0,
+    width: 28,
+    height: 28,
+    background: 'none',
+    border: '1.5px solid #E2D9C8',
+    borderRadius: 8,
+    color: '#B07070',
+    fontSize: 12,
+    fontWeight: 700,
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 4,
   },
 }
