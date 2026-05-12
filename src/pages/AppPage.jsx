@@ -4,8 +4,6 @@ import { supabase } from "../lib/supabase";
 import { startSession, trackEvent, endSession } from "../lib/analytics";
 import { useAuth } from "../hooks/useAuth";
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
-
 // ─── ÁRVORE BÁSICO / INTERMEDIÁRIO ───────────────────────────────────────── v2
 const TREE = {
   basico: [
@@ -160,7 +158,7 @@ function PainScale({ onSelect, speaking }) {
 
 // ─── APP PAGE ────────────────────────────────────────────────────────────────
 export default function AppPage() {
-  const { user, session, profile, signOut } = useAuth();
+  const { user, profile, signOut } = useAuth();
 
   const [nivel, setNivel] = useState(() => profile?.nivel || localStorage.getItem("voz_nivel") || "basico");
   const [stack, setStack] = useState([]);
@@ -168,8 +166,6 @@ export default function AppPage() {
   const [speaking, setSpeaking] = useState(false);
   const [showConfig, setShowConfig] = useState(false);
   const [configTab, setConfigTab] = useState("nivel");
-  const [context, setContext] = useState(() => profile?.context_text || localStorage.getItem("voz_ctx") || "");
-  const [ctxDraft, setCtxDraft] = useState("");
   const [selectedVoice, setSelectedVoice] = useState(() => profile?.selected_voice || localStorage.getItem("voz_voice") || ELEVEN_VOICES[0]?.id || "");
   const [testingVoice, setTestingVoice] = useState("");
   const [favoritas, setFavoritas] = useState(() => { try { return JSON.parse(localStorage.getItem("voz_favoritas") || "[]"); } catch { return []; } });
@@ -200,7 +196,6 @@ export default function AppPage() {
   useEffect(() => {
     if (profile) {
       if (profile.nivel) setNivel(profile.nivel);
-      if (profile.context_text) setContext(profile.context_text);
       if (profile.selected_voice) setSelectedVoice(profile.selected_voice);
     }
   }, [profile]);
@@ -214,23 +209,7 @@ export default function AppPage() {
     setSpeaking(true);
     try { if (navigator.vibrate) navigator.vibrate(40); } catch {}
 
-    let frase = fraseBase || node.frase;
-    let wasAiEnhanced = false;
-
-    if (context.trim() && session?.access_token) {
-      try {
-        const res = await fetch(`${SUPABASE_URL}/functions/v1/anthropic-proxy`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${session.access_token}`,
-          },
-          body: JSON.stringify({ context, base_phrase: frase }),
-        });
-        const data = await res.json();
-        if (data.phrase) { frase = data.phrase; wasAiEnhanced = true; }
-      } catch {}
-    }
+    const frase = fraseBase || node.frase;
 
     speakElevenLabs(frase, selectedVoice);
     const spoken = { ...node, frase };
@@ -246,7 +225,7 @@ export default function AppPage() {
         emoji: node.e,
         nivel,
         source,
-        was_ai_enhanced: wasAiEnhanced,
+        was_ai_enhanced: false,
         session_id: sessionIdRef.current,
         device_info: { userAgent: navigator.userAgent, mobile: /Mobi|Android/i.test(navigator.userAgent) },
       });
@@ -261,7 +240,7 @@ export default function AppPage() {
 
     setStack([]);
     setTimeout(() => setSpeaking(false), 2500);
-  }, [speaking, context, selectedVoice, session, user, nivel]);
+  }, [speaking, selectedVoice, user, nivel]);
 
   const handleNode = useCallback((node) => {
     if (speaking) return;
@@ -289,17 +268,14 @@ export default function AppPage() {
   };
 
   const saveConfig = () => {
-    setContext(ctxDraft);
     setFavoritas(favDraft);
     try {
-      localStorage.setItem("voz_ctx", ctxDraft);
       localStorage.setItem("voz_voice", selectedVoice);
       localStorage.setItem("voz_nivel", nivel);
       localStorage.setItem("voz_favoritas", JSON.stringify(favDraft));
     } catch {}
-    // Persiste no Supabase se autenticado
     if (user?.id) {
-      supabase.from("profiles").update({ nivel, context_text: ctxDraft, selected_voice: selectedVoice }).eq("id", user.id).then(() => {});
+      supabase.from("profiles").update({ nivel, selected_voice: selectedVoice }).eq("id", user.id).then(() => {});
     }
     setShowConfig(false);
   };
@@ -318,12 +294,12 @@ export default function AppPage() {
           <span style={{ fontSize: 10, color: "#8A7D6A", fontFamily: "'DM Sans',sans-serif", fontWeight: 500, letterSpacing: 0.3 }}>seu assistente de voz</span>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <span style={{ ...s.badge, cursor: "pointer" }} onClick={() => { setCtxDraft(context); setFavDraft(favoritas); setShowConfig(true); setConfigTab("nivel"); }}>
+          <span style={{ ...s.badge, cursor: "pointer" }} onClick={() => { setFavDraft(favoritas); setShowConfig(true); setConfigTab("nivel"); }}>
             {nivelInfo.icon} {nivelInfo.label}
           </span>
           {lastSpoken && <button style={s.replayBtn} onClick={() => speakElevenLabs(lastSpoken.frase, selectedVoice)}>🔊</button>}
-          <button style={s.cfgBtn} onClick={() => { setCtxDraft(context); setFavDraft(favoritas); setShowConfig(true); setConfigTab("voz"); }}>🎙️</button>
-          <button style={s.cfgBtn} onClick={() => { setCtxDraft(context); setFavDraft(favoritas); setShowConfig(true); setConfigTab("nivel"); }}>⚙️</button>
+          <button style={s.cfgBtn} onClick={() => { setFavDraft(favoritas); setShowConfig(true); setConfigTab("voz"); }}>🎙️</button>
+          <button style={s.cfgBtn} onClick={() => { setFavDraft(favoritas); setShowConfig(true); setConfigTab("nivel"); }}>⚙️</button>
           {profile?.role === "admin" && (
             <a href="#/admin" style={{ ...s.cfgBtn, textDecoration: "none", fontSize: 15 }} title="Painel admin">📊</a>
           )}
@@ -420,9 +396,9 @@ export default function AppPage() {
         <div style={s.overlay} onClick={e => e.target === e.currentTarget && setShowConfig(false)}>
           <div style={s.sheet}>
             <div style={s.tabs}>
-              {["nivel", "contexto", "voz", "favoritas"].map(t => (
+              {["nivel", "voz", "favoritas"].map(t => (
                 <button key={t} style={{ ...s.tab, ...(configTab === t ? s.tabActive : {}) }} onClick={() => setConfigTab(t)}>
-                  {t === "nivel" ? "🎯" : t === "contexto" ? "👤" : t === "voz" ? "🎙️" : "⭐"}
+                  {t === "nivel" ? "🎯" : t === "voz" ? "🎙️" : "⭐"}
                 </button>
               ))}
             </div>
@@ -440,14 +416,6 @@ export default function AppPage() {
                   </div>
                 ))}
               </div>
-            )}
-
-            {configTab === "contexto" && (
-              <>
-                <div style={s.sheetSub}>Escreva quem ele é: nome, família, hábitos. A IA usa isso pra personalizar as frases.</div>
-                <textarea style={s.textarea} value={ctxDraft} onChange={e => setCtxDraft(e.target.value)}
-                  placeholder="Ex: Carlos, 68 anos. Adora Flamengo. Filhos: Ana e Pedro. Esposa: Maria. Era engenheiro..." />
-              </>
             )}
 
             {configTab === "voz" && (
