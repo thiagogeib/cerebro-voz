@@ -83,6 +83,32 @@ export default function LoginPage() {
 
   const isLogin = mode === 'login'
 
+  if (success) {
+    return (
+      <div style={s.root}>
+        <div style={s.card}>
+          <div style={s.logoArea}>
+            <span style={s.logo}>Vicente<span style={s.dot}>.</span></span>
+          </div>
+          <div style={s.successCard}>
+            <div style={s.successIcon}>✉️</div>
+            <div style={s.successTitle}>Verifique seu e-mail</div>
+            <div style={s.successMsg}>
+              Enviamos um link de confirmação para<br />
+              <strong>{email}</strong>
+            </div>
+            <div style={s.successHint}>
+              Abra o e-mail e clique no link para ativar sua conta. Depois volte aqui para entrar.
+            </div>
+            <button onClick={() => { setSuccess(null); setMode('login'); }} style={s.btnPrimary}>
+              Ir para o login
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div style={s.root}>
       <div style={s.card}>
@@ -146,12 +172,6 @@ export default function LoginPage() {
           {error && (
             <div style={s.errorBox}>
               {error}
-            </div>
-          )}
-
-          {success && (
-            <div style={s.successBox}>
-              {success}
             </div>
           )}
 
@@ -362,5 +382,39 @@ const s = {
     fontFamily: "'DM Sans', 'Segoe UI', sans-serif",
     textDecoration: 'underline',
     textUnderlineOffset: 2,
+  },
+  successCard: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    gap: 14,
+    padding: '20px 0 8px',
+    textAlign: 'center',
+  },
+  successIcon: {
+    fontSize: 52,
+    lineHeight: 1,
+  },
+  successTitle: {
+    fontFamily: 'Georgia, serif',
+    fontSize: 22,
+    fontWeight: 700,
+    color: '#2C2416',
+  },
+  successMsg: {
+    fontSize: 15,
+    color: '#2C2416',
+    lineHeight: 1.6,
+  },
+  successHint: {
+    fontSize: 13,
+    color: '#8A7D6A',
+    lineHeight: 1.6,
+    background: '#EAF2EF',
+    border: '1.5px solid #B8D9CE',
+    borderRadius: 12,
+    padding: '12px 16px',
+    width: '100%',
+    boxSizing: 'border-box',
   },
 }
