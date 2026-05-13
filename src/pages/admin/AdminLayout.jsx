@@ -105,7 +105,8 @@ const s = {
   root: {
     fontFamily: "'DM Sans', 'Segoe UI', sans-serif",
     display: 'flex',
-    minHeight: '100dvh',
+    height: '100dvh',
+    overflow: 'hidden',
     background: '#F5F0E8',
     color: '#2C2416',
   },
