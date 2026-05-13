@@ -9,6 +9,8 @@ const ERRORS = {
   'Password should be at least 6 characters': 'A senha deve ter pelo menos 6 caracteres.',
   'Signup requires a valid password': 'Informe uma senha válida.',
   'Unable to validate email address: invalid format': 'Formato de e-mail inválido.',
+  'email rate limit exceeded': 'Muitas tentativas. Aguarde alguns minutos e tente novamente.',
+  'For security purposes, you can only request this': 'Por segurança, aguarde alguns segundos antes de tentar novamente.',
 }
 
 function translateError(msg) {
@@ -202,6 +204,19 @@ export default function LoginPage() {
           )}
         </div>
 
+        {/* CONTATO DESENVOLVEDOR */}
+        <div style={s.devContact}>
+          <span style={s.devText}>Dúvidas ou sugestões?</span>
+          <a
+            href="https://wa.me/5519987801102?text=Ol%C3%A1%2C%20tenho%20uma%20d%C3%BAvida%20sobre%20o%20Vicente"
+            target="_blank"
+            rel="noopener noreferrer"
+            style={s.devLink}
+          >
+            Fale com o desenvolvedor
+          </a>
+        </div>
+
       </div>
     </div>
   )
@@ -382,6 +397,25 @@ const s = {
     fontFamily: "'DM Sans', 'Segoe UI', sans-serif",
     textDecoration: 'underline',
     textUnderlineOffset: 2,
+  },
+  devContact: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    gap: 2,
+    marginTop: 20,
+    paddingTop: 16,
+    borderTop: '1px solid #E2D9C8',
+  },
+  devText: {
+    fontSize: 11,
+    color: '#B0A494',
+  },
+  devLink: {
+    fontSize: 11,
+    fontWeight: 600,
+    color: '#5B7B6F',
+    textDecoration: 'none',
   },
   successCard: {
     display: 'flex',

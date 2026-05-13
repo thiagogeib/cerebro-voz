@@ -464,6 +464,17 @@ export default function AppPage() {
               <button style={s.btnCancel} onClick={() => setShowConfig(false)}>Cancelar</button>
               <button style={s.btnSave} onClick={saveConfig}>Salvar</button>
             </div>
+
+            <div style={s.sheetDev}>
+              <a
+                href="https://wa.me/5519987801102?text=Ol%C3%A1%2C%20tenho%20uma%20d%C3%BAvida%20sobre%20o%20Vicente"
+                target="_blank"
+                rel="noopener noreferrer"
+                style={s.sheetDevLink}
+              >
+                Dúvidas? Fale com Thiago Geib (desenvolvedor)
+              </a>
+            </div>
           </div>
         </div>
       )}
@@ -548,4 +559,6 @@ const s = {
   sheetBtns: { display: "flex", gap: 8, marginTop: 16 },
   btnSave: { flex: 1, padding: 13, background: "#5B7B6F", color: "white", border: "none", borderRadius: 12, fontSize: 15, fontWeight: 600, cursor: "pointer" },
   btnCancel: { padding: "13px 18px", background: "#E2D9C8", color: "#8A7D6A", border: "none", borderRadius: 12, fontSize: 15, cursor: "pointer" },
+  sheetDev: { textAlign: "center", marginTop: 12, paddingTop: 12, borderTop: "1px solid #E2D9C8" },
+  sheetDevLink: { fontSize: 11, color: "#8A7D6A", textDecoration: "none" },
 };
