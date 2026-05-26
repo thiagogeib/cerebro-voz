@@ -26,11 +26,18 @@ export function useAuth() {
   }
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session: currentSession } }) => {
-      setSession(currentSession)
-      setUser(currentSession?.user ?? null)
-      loadProfile(currentSession?.user?.id ?? null).finally(() => setLoading(false))
-    })
+    const timeout = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('timeout')), 8000)
+    )
+
+    Promise.race([supabase.auth.getSession(), timeout])
+      .then(({ data: { session: currentSession } }) => {
+        setSession(currentSession)
+        setUser(currentSession?.user ?? null)
+        return loadProfile(currentSession?.user?.id ?? null)
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false))
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, newSession) => {
       setSession(newSession)
