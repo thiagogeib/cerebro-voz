@@ -483,28 +483,58 @@ export default function AppPage() {
 }
 
 // ─── ADD FAVORITA ─────────────────────────────────────────────────────────────
+const EMOJI_CATS = [
+  { id: "saude",      label: "🏥", title: "Saúde",      emojis: ["💊","🏥","🤕","💉","🩺","😷","🩹","🌡️","🆘","🚑","🛌","🧠","💪","🦽","🦷","👁️","👂"] },
+  { id: "sentir",     label: "😊", title: "Sentimentos", emojis: ["😊","😢","😡","😰","🥰","😴","😕","😣","😤","😂","😨","🤔","😩","🥺","😌","😶","🤗","😳","😱","🤯","😔","🥵","🥶"] },
+  { id: "comida",     label: "🍽️", title: "Comida",      emojis: ["🍽️","🍎","🍞","🥣","🍕","🍰","🍌","🥗","🍗","🥚","🥩","🍝","🍲","🥪","🫐","🍇","🍓","🥑","🧀","🥕"] },
+  { id: "bebida",     label: "☕", title: "Bebida",      emojis: ["☕","💧","🧃","🍵","🥤","🍺","🍷","🥛","🫖","🧋","🍶","🥂"] },
+  { id: "atividade",  label: "🎵", title: "Atividades",  emojis: ["🎵","📺","📱","🚶","🛏️","📖","🎮","🎨","✍️","🎲","🧩","🎬","🎧","🏊","🚴","🌳","🌸","🌙","☀️","❄️"] },
+  { id: "pessoas",    label: "👨", title: "Pessoas",     emojis: ["👨","👩","👴","👵","👶","🤗","❤️","🙏","👍","👎","🤝","✋","👋","💋","🫂","👪","🧑‍⚕️","📞","📲"] },
+  { id: "lugares",    label: "🏠", title: "Lugares",     emojis: ["🏠","🚽","🛁","🚿","🏥","🚗","🌳","🛒","🍴","🏪","🚌","✈️","🛶","🏖️","🕌"] },
+];
+
 function AddFavorita({ onAdd }) {
-  const EMOJIS = ["☕","💧","🍽️","💊","📺","🎵","🚶","❤️","🙏","😊","🆘","🤗","📞","🛏️","🍺"];
-  const [emoji, setEmoji] = useState("☕");
+  const [cat, setCat] = useState("saude");
+  const [emoji, setEmoji] = useState("💊");
   const [label, setLabel] = useState("");
   const [frase, setFrase] = useState("");
+
+  const currentEmojis = EMOJI_CATS.find(c => c.id === cat)?.emojis || [];
 
   return (
     <div style={{ background: "#EAF2EF", borderRadius: 12, padding: 12 }}>
       <div style={{ fontSize: 12, fontWeight: 700, color: "#5B7B6F", marginBottom: 8 }}>+ Nova favorita</div>
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 10 }}>
-        {EMOJIS.map(e => (
+
+      {/* Abas de categoria */}
+      <div style={{ display: "flex", gap: 4, overflowX: "auto", marginBottom: 8, paddingBottom: 2 }}>
+        {EMOJI_CATS.map(c => (
+          <button key={c.id} onClick={() => setCat(c.id)}
+            style={{ flexShrink: 0, fontSize: 18, background: cat === c.id ? "#5B7B6F" : "#FFFDF8", border: "none", borderRadius: 8, padding: "4px 8px", cursor: "pointer", opacity: cat === c.id ? 1 : 0.6 }}
+            title={c.title}>
+            {c.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Grid de emojis */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 4, marginBottom: 10, maxHeight: 130, overflowY: "auto" }}>
+        {currentEmojis.map(e => (
           <button key={e} onClick={() => setEmoji(e)}
-            style={{ fontSize: 20, background: emoji === e ? "#5B7B6F" : "#FFFDF8", border: "none", borderRadius: 8, padding: "4px 8px", cursor: "pointer" }}>
+            style={{ fontSize: 22, background: emoji === e ? "#5B7B6F" : "#FFFDF8", border: emoji === e ? "2px solid #5B7B6F" : "2px solid transparent", borderRadius: 8, padding: "4px 2px", cursor: "pointer", lineHeight: 1.3 }}>
             {e}
           </button>
         ))}
       </div>
+
+      <div style={{ fontSize: 12, color: "#5B7B6F", marginBottom: 8 }}>
+        Selecionado: <span style={{ fontSize: 20 }}>{emoji}</span>
+      </div>
+
       <input style={{ ...inputStyle, marginBottom: 8 }} value={label} onChange={e => setLabel(e.target.value)} placeholder="Nome curto (ex: Café)" />
       <input style={{ ...inputStyle, marginBottom: 10 }} value={frase} onChange={e => setFrase(e.target.value)} placeholder="Frase completa (ex: Quero tomar um café.)" />
       <button
         style={{ width: "100%", padding: 10, background: label && frase ? "#5B7B6F" : "#E2D9C8", color: label && frase ? "white" : "#8A7D6A", border: "none", borderRadius: 10, fontWeight: 600, cursor: label && frase ? "pointer" : "not-allowed", fontSize: 14 }}
-        onClick={() => { if (label && frase) { onAdd({ e: emoji, l: label, frase }); setLabel(""); setFrase(""); } }}
+        onClick={() => { if (label && frase) { onAdd({ e: emoji, l: label, frase }); setLabel(""); setFrase(""); setEmoji(emoji); } }}
       >
         Adicionar
       </button>
