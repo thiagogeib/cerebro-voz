@@ -3,76 +3,7 @@ import { speakElevenLabs, ELEVEN_VOICES } from "../useTTS";
 import { supabase } from "../lib/supabase";
 import { startSession, trackEvent, endSession } from "../lib/analytics";
 import { useAuth } from "../hooks/useAuth";
-
-// ─── ÁRVORE BÁSICO / INTERMEDIÁRIO ───────────────────────────────────────── v2
-const TREE = {
-  basico: [
-    { id: "sede", e: "💧", l: "Sede", filhos: [
-      { id: "agua",      e: "💧", l: "Água",    frase: "Estou com sede, quero água por favor." },
-      { id: "suco",      e: "🧃", l: "Suco",    frase: "Quero tomar um suco, por favor." },
-      { id: "cafe",      e: "☕", l: "Café",    frase: "Quero tomar um café, por favor." },
-      { id: "cha",       e: "🍵", l: "Chá",     frase: "Quero tomar um chá, por favor." },
-    ]},
-    { id: "fome", e: "🍽️", l: "Fome", filhos: [
-      { id: "refeicao",  e: "🍽️", l: "Refeição", frase: "Estou com fome, quero comer alguma coisa." },
-      { id: "fruta",     e: "🍎", l: "Fruta",    frase: "Quero comer uma fruta." },
-      { id: "pao",       e: "🍞", l: "Pão",      frase: "Quero comer um pão." },
-      { id: "sopa",      e: "🥣", l: "Sopa",     frase: "Quero comer uma sopa." },
-    ]},
-    { id: "dor", e: "😣", l: "Dor", filhos: [
-      { id: "dor_cabeca",  e: "🤕", l: "Cabeça",  frase: "Estou com dor de cabeça." },
-      { id: "dor_corpo",   e: "💪", l: "Corpo",   frase: "Estou com dor no corpo." },
-      { id: "dor_barriga", e: "🤢", l: "Barriga", frase: "Estou com dor de barriga." },
-      { id: "dor_forte",   e: "🆘", l: "Forte",   frase: "Estou sentindo uma dor muito forte, preciso de ajuda." },
-    ]},
-    { id: "banheiro", e: "🚽", l: "Banheiro", frase: "Preciso ir ao banheiro." },
-    { id: "remedios", e: "💊", l: "Remédio", filhos: [
-      { id: "rem_hora",   e: "⏰", l: "Hora certa",  frase: "Está na hora do meu remédio." },
-      { id: "rem_dor",    e: "😣", l: "Para dor",    frase: "Preciso de remédio para dor." },
-      { id: "rem_dormir", e: "😴", l: "Para dormir", frase: "Preciso do remédio para dormir." },
-    ]},
-    { id: "ajuda", e: "🆘", l: "Ajuda", frase: "Preciso de ajuda agora, por favor." },
-  ],
-  intermediario: [
-    { id: "sentir", e: "💛", l: "Me sinto", filhos: [
-      { id: "bem",      e: "😊", l: "Bem",      frase: "Estou me sentindo bem hoje." },
-      { id: "mal", e: "😔", l: "Mal", filhos: [
-        { id: "cansado",  e: "😴", l: "Cansado",  frase: "Estou me sentindo muito cansado." },
-        { id: "triste",   e: "😢", l: "Triste",   frase: "Estou me sentindo triste." },
-        { id: "ansioso",  e: "😰", l: "Ansioso",  frase: "Estou me sentindo ansioso e agitado." },
-        { id: "confuso",  e: "😕", l: "Confuso",  frase: "Estou me sentindo confuso, pode me ajudar?" },
-      ]},
-      { id: "feliz",    e: "🥰", l: "Feliz",    frase: "Estou feliz e contente hoje." },
-      { id: "irritado", e: "😡", l: "Irritado", frase: "Estou me sentindo irritado agora." },
-    ]},
-    { id: "familia", e: "👨‍👩‍👧", l: "Família", filhos: [
-      { id: "falar_filho",  e: "👨", l: "Filho",  frase: "Quero falar com meu filho." },
-      { id: "falar_filha",  e: "👩", l: "Filha",  frase: "Quero falar com minha filha." },
-      { id: "falar_esposa", e: "👵", l: "Esposa", frase: "Quero falar com minha esposa." },
-      { id: "amor",         e: "❤️", l: "Amor",   frase: "Eu amo muito vocês." },
-      { id: "abraco",       e: "🤗", l: "Abraço", frase: "Quero dar um abraço." },
-    ]},
-    { id: "quero", e: "▶️", l: "Quero", filhos: [
-      { id: "tv",        e: "📺", l: "TV",       frase: "Quero assistir televisão." },
-      { id: "musica",    e: "🎵", l: "Música",   frase: "Quero ouvir uma música." },
-      { id: "sair",      e: "🚶", l: "Sair",     frase: "Quero sair para caminhar um pouco." },
-      { id: "descansar", e: "🛏️", l: "Descansar",frase: "Quero descansar, estou cansado." },
-      { id: "cafe_int",  e: "☕", l: "Café",     frase: "Quero tomar um café." },
-    ]},
-    { id: "simnas", e: "👍", l: "Sim / Não", filhos: [
-      { id: "sim",      e: "👍", l: "Sim",      frase: "Sim, concordo." },
-      { id: "nao",      e: "👎", l: "Não",      frase: "Não, não concordo." },
-      { id: "talvez",   e: "🤔", l: "Talvez",   frase: "Talvez, preciso pensar." },
-      { id: "repetir",  e: "🔁", l: "Repetir",  frase: "Pode repetir o que disse?" },
-      { id: "obrigado", e: "🙏", l: "Obrigado", frase: "Muito obrigado por tudo." },
-    ]},
-  ],
-};
-
-function getCats(nivel) {
-  if (nivel === "basico") return TREE.basico;
-  return [...TREE.basico, ...TREE.intermediario];
-}
+import { getCats } from "../data/tree";
 
 function getSugestoes(historico) {
   const h = new Date().getHours();
