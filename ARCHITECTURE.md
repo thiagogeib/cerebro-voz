@@ -938,7 +938,7 @@ próprio banco de produção: o proxy devolveu 8822 bytes de MP3 na voz real,
 recusou requisição sem login (401) e recusou voz fora da lista (400). Sem essa
 prova, remover a rota antiga seria aposta.
 
-### Pendente: rotacionar a chave
+### Rotacionar a chave — adiado por decisão do dono do projeto (27/08/2026)
 
 A chave que está no secret é **a mesma que esteve publicada no site**. Ela
 saiu do bundle de hoje em diante, mas quem já tiver copiado continua com uma
@@ -954,6 +954,15 @@ supabase secrets set ELEVEN_KEY=sk_novo... --project-ref kqhffeiredwrhutffibg
 
 Isso não exige mudança de código nem novo deploy do site — a função lê o
 secret a cada chamada. É o passo que fecha o problema de vez.
+
+**Decisão de 27/08/2026: adiado.** A migração já resolveu o vazamento contínuo
+(a chave não é mais publicada a cada build), o app está funcionando, e trocar a
+chave agora exigiria uma janela de atenção que não se justificava no momento.
+Fica registrado como dívida conhecida, não como esquecimento.
+
+Quando for feito, o roteiro é o de cima e leva um minuto. Vale priorizar se
+aparecer consumo estranho na conta da ElevenLabs — é o sintoma de que alguém
+achou a chave antiga.
 
 ### Detalhe cosmético
 
