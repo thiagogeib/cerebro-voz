@@ -3,9 +3,10 @@ import { speakElevenLabs, stopSpeaking, ELEVEN_VOICES } from "../useTTS";
 import { supabase } from "../lib/supabase";
 import { startSession, trackEvent, endSession, fetchHistoricoRemoto } from "../lib/analytics";
 import { carregarFavoritas, salvarFavoritas } from "../lib/favoritas";
+import { carregarPessoas, salvarPessoas, lerPessoasLocal } from "../lib/pessoas";
 import { countCachedAudio, clearAudioCache } from "../lib/audioCache";
 import { useAuth } from "../hooks/useAuth";
-import { getCats } from "../data/tree";
+import { getCats, fraseFalarCom, rotuloCasaDe, RELACOES } from "../data/tree";
 
 // Trava de segurança: se o áudio travar e nunca avisar que terminou, os botões
 // voltam a funcionar depois desse tempo. No caminho normal quem libera é o
@@ -112,6 +113,10 @@ export default function AppPage() {
   const [fragmento, setFragmento] = useState("");
   const [sugestoes, setSugestoes] = useState([]);
   const [cacheCount, setCacheCount] = useState(0);
+  // Leitura síncrona do aparelho: os botões com nome precisam aparecer já na
+  // primeira pintura, sem piscar os genéricos antes nem esperar a rede.
+  const [pessoas, setPessoas] = useState(() => lerPessoasLocal());
+  const [pessoasDraft, setPessoasDraft] = useState([]);
 
   const sessionIdRef = useRef(null);
   const phraseCountRef = useRef(0);
@@ -172,6 +177,10 @@ export default function AppPage() {
 
     carregarFavoritas(user.id).then(lista => {
       if (ativo && lista.length) setFavoritas(lista);
+    });
+
+    carregarPessoas(user.id).then(lista => {
+      if (ativo && lista.length) setPessoas(lista);
     });
 
     setHistorico(atual => {
@@ -238,6 +247,7 @@ export default function AppPage() {
     if (user?.id) {
       trackEvent({
         user_id: user.id,
+        node_id: node.id ?? null,
         phrase_text: frase,
         phrase_label: node.l,
         emoji: node.e,
@@ -274,7 +284,7 @@ export default function AppPage() {
     setLastSpoken(node);
     phraseCountRef.current += 1;
     if (user?.id) {
-      trackEvent({ user_id: user.id, phrase_text: fragmento, phrase_label: fragmento, emoji: "✍️", nivel, source: "fragmento", was_ai_enhanced: false, session_id: sessionIdRef.current, device_info: {} });
+      trackEvent({ user_id: user.id, node_id: null, phrase_text: fragmento, phrase_label: fragmento, emoji: "✍️", nivel, source: "fragmento", was_ai_enhanced: false, session_id: sessionIdRef.current, device_info: {} });
     }
     setHistorico(h => {
       const semDup = h.filter(item => item.frase !== node.frase);
@@ -287,6 +297,7 @@ export default function AppPage() {
 
   const saveConfig = () => {
     setFavoritas(favDraft);
+    setPessoas(pessoasDraft);
     try {
       localStorage.setItem("voz_voice", selectedVoice);
       localStorage.setItem("voz_nivel", nivel);
@@ -294,6 +305,11 @@ export default function AppPage() {
 
     // Grava local na hora e sincroniza com o banco em segundo plano.
     void salvarFavoritas(user?.id, favDraft);
+    void salvarPessoas(user?.id, pessoasDraft);
+
+    // O caminho aberto guarda os botões de ANTES do cadastro. Voltar para a
+    // raiz evita que ele fique olhando uma tela que não existe mais.
+    setStack([]);
 
     if (user?.id) {
       supabase.from("profiles").update({ nivel, selected_voice: selectedVoice }).eq("id", user.id).then(() => {});
@@ -301,12 +317,19 @@ export default function AppPage() {
     setShowConfig(false);
   };
 
-  const currentNodes = stack.length > 0 ? stack[stack.length - 1].filhos : getCats(nivel);
+  const currentNodes = stack.length > 0 ? stack[stack.length - 1].filhos : getCats(nivel, pessoas);
   // Se o nível vier com um valor inesperado do banco, cai no básico em vez de
   // quebrar a tela inteira.
   const nivelInfo = NIVEIS.find(n => n.id === nivel) || NIVEIS[0];
   const GRID_COLS = nivel === "basico" ? 2 : 3;
-  const BTN_HEIGHT = nivel === "basico" ? 100 : 82;
+
+  // No básico os botões são propositalmente grandes. Mas em tela pequena uma
+  // lista longa (as 9 bebidas da Sede) empurraria a última opção para fora da
+  // vista, e rolar é um gesto que ele pode simplesmente não fazer — o botão
+  // que não aparece, para ele, não existe. Nessas telas o botão encolhe um
+  // pouco em vez de sumir. 84px continua bem acima do mínimo confortável.
+  const listaLonga = (currentNodes?.length || 0) > 6;
+  const BTN_HEIGHT = nivel === "basico" ? (listaLonga ? 84 : 100) : 82;
 
   return (
     <div style={s.root}>
@@ -317,12 +340,12 @@ export default function AppPage() {
           <span style={{ fontSize: 10, color: "#8A7D6A", fontFamily: "'DM Sans',sans-serif", fontWeight: 500, letterSpacing: 0.3 }}>seu assistente de voz</span>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <span style={{ ...s.badge, cursor: "pointer" }} onClick={() => { setFavDraft(favoritas); setShowConfig(true); setConfigTab("nivel"); }}>
+          <span style={{ ...s.badge, cursor: "pointer" }} onClick={() => { setFavDraft(favoritas); setPessoasDraft(pessoas); setShowConfig(true); setConfigTab("nivel"); }}>
             {nivelInfo.icon} {nivelInfo.label}
           </span>
           {lastSpoken && <button style={s.replayBtn} onClick={() => speakElevenLabs(lastSpoken.frase, selectedVoice)}>🔊</button>}
-          <button style={s.cfgBtn} onClick={() => { setFavDraft(favoritas); setShowConfig(true); setConfigTab("voz"); }}>🎙️</button>
-          <button style={s.cfgBtn} onClick={() => { setFavDraft(favoritas); setShowConfig(true); setConfigTab("nivel"); }}>⚙️</button>
+          <button style={s.cfgBtn} onClick={() => { setFavDraft(favoritas); setPessoasDraft(pessoas); setShowConfig(true); setConfigTab("voz"); }}>🎙️</button>
+          <button style={s.cfgBtn} onClick={() => { setFavDraft(favoritas); setPessoasDraft(pessoas); setShowConfig(true); setConfigTab("nivel"); }}>⚙️</button>
           {profile?.role === "admin" && (
             <a href="#/admin" style={{ ...s.cfgBtn, textDecoration: "none", fontSize: 15 }} title="Painel admin">📊</a>
           )}
@@ -419,9 +442,9 @@ export default function AppPage() {
         <div style={s.overlay} onClick={e => e.target === e.currentTarget && setShowConfig(false)}>
           <div style={s.sheet}>
             <div style={s.tabs}>
-              {["nivel", "voz", "favoritas"].map(t => (
+              {["nivel", "voz", "favoritas", "familia"].map(t => (
                 <button key={t} style={{ ...s.tab, ...(configTab === t ? s.tabActive : {}) }} onClick={() => setConfigTab(t)}>
-                  {t === "nivel" ? "🎯" : t === "voz" ? "🎙️" : "⭐"}
+                  {t === "nivel" ? "🎯" : t === "voz" ? "🎙️" : t === "favoritas" ? "⭐" : "👥"}
                 </button>
               ))}
             </div>
@@ -500,6 +523,38 @@ export default function AppPage() {
                   ))}
                 </div>
                 <AddFavorita onAdd={f => setFavDraft(d => [...d, f])} />
+              </>
+            )}
+
+            {configTab === "familia" && (
+              <>
+                <div style={s.sheetSub}>
+                  Cadastre a família pelo nome. O botão "Filho" vira "João", e a frase sai falada com o nome dele.
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 12 }}>
+                  {pessoasDraft.map((p, i) => (
+                    <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", background: "#F5F0E8", borderRadius: 10 }}>
+                      <span style={{ fontSize: 20 }}>{p.e}</span>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 13, fontWeight: 700, color: "#2C2416" }}>{p.nome}</div>
+                        <div style={{ fontSize: 11, color: "#8A7D6A" }}>
+                          {RELACOES.find(r => r.id === p.relacao)?.label || p.relacao}
+                          {p.casa && " · aparece no Sair"}
+                        </div>
+                      </div>
+                      <button onClick={() => setPessoasDraft(d => d.filter((_, j) => j !== i))}
+                        style={{ background: "#E2D9C8", border: "none", borderRadius: 20, padding: "2px 10px", cursor: "pointer", color: "#8A7D6A", fontSize: 13 }}>
+                        ✕
+                      </button>
+                    </div>
+                  ))}
+                  {!pessoasDraft.length && (
+                    <div style={{ fontSize: 12, color: "#8A7D6A", textAlign: "center", padding: "10px 0" }}>
+                      Ninguém cadastrado — os botões seguem genéricos ("Filho", "Filha").
+                    </div>
+                  )}
+                </div>
+                <AddPessoa onAdd={p => setPessoasDraft(d => [...d, p])} />
               </>
             )}
 
@@ -586,6 +641,110 @@ function AddFavorita({ onAdd }) {
 }
 
 const inputStyle = { width: "100%", border: "1.5px solid #E2D9C8", borderRadius: 10, padding: "8px 12px", fontSize: 13, background: "#FFFDF8", outline: "none", fontFamily: "'DM Sans',sans-serif" };
+
+// ─── ADD PESSOA ───────────────────────────────────────────────────────────────
+//
+// A relação (filho, filha, esposa...) não é só organização: é ela que decide o
+// artigo da frase — "falar com O João" ou "falar com A Maria". Por isso a
+// frase pronta aparece na tela antes de salvar: quem cadastra confere como vai
+// sair na voz dele.
+function AddPessoa({ onAdd }) {
+  const [nome, setNome] = useState("");
+  const [relacao, setRelacao] = useState("filho");
+  const [emoji, setEmoji] = useState("👨");
+  const [casa, setCasa] = useState(false);
+
+  // Só rostos e figuras de gente. A categoria "pessoas" do seletor de
+  // favoritas traz coração, telefone e mãos — não servem para dizer QUEM é.
+  const emojisPessoas = [
+    "👨", "👩", "🧑", "👴", "👵", "👦", "👧", "👶",
+    "👨‍🦰", "👩‍🦰", "👨‍🦳", "👩‍🦳", "👨‍🦲", "🧔", "👳", "🧕",
+    "👨‍⚕️", "👩‍⚕️", "👨‍🌾", "👩‍🌾", "👮", "🧑‍🍳", "👨‍🏫", "👩‍🏫",
+  ];
+  const pronto = nome.trim().length > 0;
+
+  const escolherRelacao = (r) => {
+    setRelacao(r.id);
+    setEmoji(r.emoji);   // sugestão; dá para trocar logo abaixo
+  };
+
+  const adicionar = () => {
+    if (!pronto) return;
+    onAdd({ nome: nome.trim(), e: emoji, relacao, casa });
+    setNome("");
+    setCasa(false);
+  };
+
+  return (
+    <div style={{ background: "#EAF2EF", borderRadius: 12, padding: 12 }}>
+      <div style={{ fontSize: 12, fontWeight: 700, color: "#5B7B6F", marginBottom: 8 }}>+ Nova pessoa</div>
+
+      <input
+        style={{ ...inputStyle, marginBottom: 8 }}
+        value={nome}
+        onChange={e => setNome(e.target.value)}
+        placeholder="Nome (ex: João)"
+        onKeyDown={e => e.key === "Enter" && adicionar()}
+      />
+
+      {/* Relação — define o artigo da frase */}
+      <div style={{ display: "flex", gap: 4, overflowX: "auto", marginBottom: 8, paddingBottom: 2 }}>
+        {RELACOES.map(r => (
+          <button
+            key={r.id}
+            onClick={() => escolherRelacao(r)}
+            style={{
+              flexShrink: 0, padding: "5px 10px", borderRadius: 20, fontSize: 12, cursor: "pointer",
+              border: "1.5px solid " + (relacao === r.id ? "#5B7B6F" : "#E2D9C8"),
+              background: relacao === r.id ? "#5B7B6F" : "#FFFDF8",
+              color: relacao === r.id ? "white" : "#8A7D6A",
+              fontFamily: "'DM Sans',sans-serif",
+            }}
+          >
+            {r.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Emoji do botão */}
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginBottom: 8 }}>
+        {emojisPessoas.map(em => (
+          <button
+            key={em}
+            onClick={() => setEmoji(em)}
+            style={{
+              width: 32, height: 32, fontSize: 17, cursor: "pointer", borderRadius: 8,
+              border: "1.5px solid " + (emoji === em ? "#5B7B6F" : "transparent"),
+              background: emoji === em ? "#FFFDF8" : "transparent",
+            }}
+          >
+            {em}
+          </button>
+        ))}
+      </div>
+
+      <label style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8, cursor: "pointer", fontSize: 12, color: "#2C2416" }}>
+        <input type="checkbox" checked={casa} onChange={e => setCasa(e.target.checked)} style={{ width: 16, height: 16 }} />
+        Criar também o botão "{rotuloCasaDe({ nome: nome.trim(), relacao })}" no Sair
+      </label>
+
+      {/* Confere como vai sair falado antes de salvar */}
+      <div style={{ background: "#FFFDF8", borderRadius: 10, padding: "8px 10px", marginBottom: 10 }}>
+        <div style={{ fontSize: 10, color: "#8A7D6A", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 2 }}>Vai falar</div>
+        <div style={{ fontSize: 13, color: "#2C2416", fontFamily: "'Lora',serif" }}>
+          {emoji} {fraseFalarCom({ nome: nome.trim(), relacao })}
+        </div>
+      </div>
+
+      <button
+        style={{ width: "100%", padding: 10, background: pronto ? "#5B7B6F" : "#E2D9C8", color: pronto ? "white" : "#8A7D6A", border: "none", borderRadius: 10, fontWeight: 600, cursor: pronto ? "pointer" : "not-allowed", fontSize: 14 }}
+        onClick={adicionar}
+      >
+        Adicionar
+      </button>
+    </div>
+  );
+}
 
 const s = {
   root: { fontFamily: "'DM Sans','Segoe UI',sans-serif", background: "#F5F0E8", color: "#2C2416", display: "flex", flexDirection: "column", height: "100dvh", maxWidth: 540, margin: "0 auto", overflow: "hidden" },
