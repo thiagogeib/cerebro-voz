@@ -695,3 +695,121 @@ supabase/functions/anthropic-proxy
 | Cold start da Edge Function atrasa personalização | Baixa | Baixo | Personalização já é async; fallback é a frase original |
 | localStorage antigo conflita com dados do Supabase | Alta | Médio | Na Fase 2, fazer migração única no primeiro login: ler localStorage, escrever no Supabase, limpar chaves antigas |
 | Rate limit ElevenLabs em uso intenso | Baixa | Médio | Já existe fallback para SpeechSynthesis; manter comportamento atual |
+
+---
+
+# Revisão de 2026-08-27 — offline, cache de áudio e chave da voz
+
+Mudanças posteriores ao documento acima. O que está escrito antes continua
+valendo; o que segue acrescenta ou corrige.
+
+## ADR-004: App offline-first (PWA)
+
+**Status:** Aceito
+
+**Contexto:** o app é o meio de fala de uma pessoa. Até aqui, ficar sem sinal
+significava ficar sem voz: nada era cacheado e o site simplesmente não abria.
+
+**Decisão:** service worker próprio (`public/sw.js`), escrito à mão em vez de
+`vite-plugin-pwa`, para não adicionar dependência de build e manter controle
+explícito do que é cacheado.
+
+Estratégias por tipo de requisição:
+
+| Requisição | Estratégia | Por quê |
+|---|---|---|
+| Abrir o app (navigate) | rede primeiro, cache como reserva | pega versão nova quando dá, mas nunca falha |
+| Arquivos do site | cache primeiro, atualiza atrás | resposta instantânea |
+| Fontes do Google | cache primeiro | não mudam |
+| Supabase e ElevenLabs | **sem cache** | resposta velha de API é pior que erro |
+
+**Consequências:** o app instala na tela inicial e abre sem rede. Uma versão
+nova só chega quando há internet — aceitável, já que o conteúdo é estável.
+
+## ADR-005: Cache do áudio das frases
+
+**Status:** Aceito
+
+**Contexto:** cada toque em um botão gerava uma requisição nova à ElevenLabs,
+mesmo sendo sempre as mesmas ~60 frases. Isso custava crédito a cada repetição
+e, pior, impunha a espera da rede antes de cada fala.
+
+**Decisão:** guardar o MP3 de cada frase falada na Cache Storage do navegador
+(`src/lib/audioCache.js`), chaveado por texto + voz. O TTS passa a consultar o
+cache antes de qualquer rede.
+
+**Consequências:**
+- A mesma frase só é gerada uma vez; da segunda em diante é instantânea, offline e de graça.
+- Trocar de voz gera os áudios de novo (a chave inclui a voz) — os antigos ficam guardados caso ele volte à voz anterior.
+- Teto de 300 frases, descartando as mais antigas.
+- A configuração mostra quantas frases estão guardadas, com botão para limpar.
+
+**Passo natural seguinte:** pré-gerar no build os áudios da árvore inteira e
+versioná-los, para que o app já nasça 100% offline em aparelho novo.
+
+## ADR-006: O app abre sem sessão válida em aparelho conhecido
+
+**Status:** Aceito
+
+**Contexto:** o JWT do Supabase expira. Sem rede para renovar — ou com o
+projeto free tier pausado — a sessão volta vazia e o `ProtectedRoute` mandava
+para a tela de login. Resultado: exatamente quando tudo está fora do ar, o
+Vicente perde o meio de falar. Além disso o endereço fica gravado em
+`#/login`, então ele ficava preso lá mesmo depois.
+
+**Decisão:** um login bem-sucedido grava a marca `voz_ja_logou` no aparelho.
+Enquanto ela existir, o app abre mesmo sem sessão. O botão "Sair" a apaga.
+A tela de login redireciona sozinha para o app quando detecta que o servidor
+está inalcançável, e oferece a saída manual "Sem internet? Entrar assim mesmo".
+
+**Por que é aceitável:** as frases são as mesmas para todo mundo e já estão no
+código do site público — não há segredo a proteger. Escrever no banco continua
+exigindo sessão válida (o RLS não mudou) e o painel admin continua exigindo
+sessão com `role = admin`.
+
+**Detalhe importante:** `navigator.onLine` não pode ser usado para essa
+detecção. Ele volta a reportar `true` assim que o service worker entrega a
+página do cache, mesmo sem rede alguma — confirmado em teste. Por isso
+`src/lib/conexao.js` testa a conectividade de verdade, com uma requisição
+curta ao Supabase.
+
+## ADR-007: Chave da ElevenLabs fora do navegador
+
+**Status:** Aceito — implementado, **falta deployar**
+
+**Contexto:** o ADR-001 tirou a chave da Anthropic do browser via Edge
+Function, mas a chave da ElevenLabs continuou sendo injetada no bundle pelo
+`deploy.yml`. Em um site público, é uma chave de API exposta.
+
+**Decisão:** Edge Function `tts-proxy`, mesmo padrão do `anthropic-proxy`:
+exige JWT, valida o tamanho do texto e aceita apenas as cinco vozes do app.
+
+A migração é por ausência de variável: com `VITE_ELEVEN_KEY` presente o app
+usa a rota direta (comportamento antigo); sem ela, usa o proxy. Assim o deploy
+da function e a remoção do secret podem acontecer em momentos diferentes, sem
+janela em que a voz pare de funcionar.
+
+**Pendente:** `supabase functions deploy tts-proxy`, `supabase secrets set
+ELEVEN_KEY=...` e remover `VITE_ELEVEN_KEY` do GitHub Actions.
+
+## Correções pontuais
+
+- **Sessão de analytics:** o listener de `visibilitychange` era registrado com uma função anônima e removido com outra referência — nunca era removido. Além disso, apagar a tela do celular encerrava a sessão e ela não reabria: tudo que ele falasse depois era gravado numa sessão já fechada. Agora ela reabre ao voltar.
+- **Fechamento da sessão:** era um `await` comum, que o navegador cancela ao fechar a aba. Passou a usar `fetch` com `keepalive`, direto na API REST, e `pagehide` no lugar de `beforeunload` (que o Safari do iPhone ignora).
+- **Travamento dos botões:** era um tempo fixo de 2,5s. Frase curta deixava ele esperando à toa; frase longa liberava no meio e a próxima cortava a anterior. Agora quem libera é o fim real do áudio, com limite de segurança. No caso da voz do aparelho há um limite estimado pelo tamanho do texto, porque nem todo aparelho dispara o evento de fim — e alguns aceitam o comando sem ter voz instalada, o que travaria os botões para sempre.
+- **`nivelInfo` sem guarda:** um valor inesperado em `profiles.nivel` derrubava a tela inteira. Agora cai no básico.
+- **`responsivevoice.js`:** carregado de CDN no `index.html` e não usado em lugar nenhum do código. Removido.
+- **Favoritas e histórico:** viviam só no `localStorage`. As favoritas passaram para a tabela `favorites` (que existia no schema desde o início e nunca havia sido usada), com migração automática do que já estava no aparelho; o histórico é reconstruído de `usage_events` quando ele abre num aparelho novo.
+- **Eventos offline:** `trackEvent` perdia o evento se a rede falhasse. Agora enfileira no `localStorage` e sobe no próximo acesso.
+
+## Observação não resolvida — recursão nas policies de `profiles`
+
+As policies "admin reads all" de `002_rls_policies.sql` consultam `profiles`
+dentro de uma policy da própria `profiles`, o que o Postgres normalmente
+rejeita com *infinite recursion detected in policy*. Como o painel admin
+funciona em produção, o banco real provavelmente já foi corrigido à mão e as
+migrations é que estão defasadas.
+
+**Não foi mexido** por não dar para confirmar sem acesso ao banco. Vale
+conferir o estado real das policies e atualizar as migrations para bater com
+ele — o caminho usual é uma função `security definer` para checar o papel.
