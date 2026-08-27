@@ -912,3 +912,52 @@ estava escrita do ponto de vista de quem anotou o papel, não do Vicente.
 No lugar, cada pessoa cadastrada pode ganhar um botão "Casa do João" em
 "Sair" — marcando uma caixa no cadastro. O mesmo cadastro resolve os dois
 lugares onde o nome importa.
+
+---
+
+## ADR-007 — atualização: chave da ElevenLabs migrada (27/08/2026)
+
+O ADR-007 estava marcado como "falta deployar". Concluído:
+
+- `tts-proxy` deployada no projeto `kqhffeiredwrhutffibg`, com `verify_jwt`
+  ligado no gateway (defesa em profundidade — a função também valida o usuário
+  por conta própria);
+- secret `ELEVEN_KEY` gravado no Supabase;
+- secret `VITE_ELEVEN_KEY` apagado do GitHub Actions;
+- build seguinte publicado sem chave nenhuma no bundle.
+
+**A ElevenLabs continua sendo a voz do app** — mesma voz, mesmo modelo, mesma
+qualidade. O ADR nunca foi sobre trocar de provedor, e sim sobre onde a chave
+mora. Vale dizer o contrário também: proteger a chave é o que garante que a
+ElevenLabs continue funcionando. Com ela exposta num site público, bastava
+alguém copiá-la e gastar o crédito para o Vicente cair na voz robótica do
+aparelho, sem aviso.
+
+**Testado antes de remover**, com um usuário temporário criado e apagado no
+próprio banco de produção: o proxy devolveu 8822 bytes de MP3 na voz real,
+recusou requisição sem login (401) e recusou voz fora da lista (400). Sem essa
+prova, remover a rota antiga seria aposta.
+
+### Pendente: rotacionar a chave
+
+A chave que está no secret é **a mesma que esteve publicada no site**. Ela
+saiu do bundle de hoje em diante, mas quem já tiver copiado continua com uma
+chave válida — inclusive a partir de builds antigos que ainda existam em
+cache, ou de qualquer cópia feita nesse período.
+
+O certo é gerar uma nova no painel da ElevenLabs, revogar a antiga, e gravar a
+nova com:
+
+```bash
+supabase secrets set ELEVEN_KEY=sk_novo... --project-ref kqhffeiredwrhutffibg
+```
+
+Isso não exige mudança de código nem novo deploy do site — a função lê o
+secret a cada chamada. É o passo que fecha o problema de vez.
+
+### Detalhe cosmético
+
+O `deploy.yml` ainda referencia `VITE_ELEVEN_KEY`. Como o secret foi apagado,
+a variável chega vazia ao build e o app usa o proxy — funciona corretamente.
+A linha não foi removida porque o token usado nesta sessão não tinha permissão
+para alterar arquivos de workflow. Vale limpar numa próxima passada.

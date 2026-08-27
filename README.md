@@ -46,20 +46,27 @@ Secrets necessários em **Settings → Secrets → Actions**:
 |---|---|
 | `VITE_SUPABASE_URL` | endereço do projeto Supabase |
 | `VITE_SUPABASE_ANON_KEY` | chave pública (o RLS é quem protege os dados) |
-| `VITE_ELEVEN_KEY` | voz — **veja abaixo, a intenção é remover** |
 
-### Tirar a chave da ElevenLabs do navegador
 
-Hoje `VITE_ELEVEN_KEY` é embutida no JavaScript do site. Como o site é público, qualquer pessoa com o DevTools aberto consegue copiá-la e gastar o crédito da conta.
+A chave da ElevenLabs **não** está mais aqui — ver a seção seguinte.
 
-A Edge Function [`supabase/functions/tts-proxy`](supabase/functions/tts-proxy/index.ts) resolve isso. Para migrar:
+### A chave da ElevenLabs não fica no navegador
+
+Feito em 27/08/2026. Antes, `VITE_ELEVEN_KEY` era embutida no JavaScript publicado — e como o site é público, a chave ficava legível para quem abrisse o arquivo em `/assets/`.
+
+Hoje a voz é gerada pela Edge Function [`tts-proxy`](supabase/functions/tts-proxy/index.ts): o navegador manda só o texto, autenticado com o login do Supabase, e a função chama a ElevenLabs com a chave que vive no servidor (secret `ELEVEN_KEY`). A função exige usuário logado e só aceita as cinco vozes do app.
+
+**A ElevenLabs continua sendo usada normalmente** — mesma voz, mesmo modelo `eleven_multilingual_v2`, mesma qualidade. O que mudou foi só onde a chave mora.
+
+Se um dia a chave precisar ser trocada, é só:
 
 ```bash
-supabase functions deploy tts-proxy
-supabase secrets set ELEVEN_KEY=sk_...
+supabase secrets set ELEVEN_KEY=sk_... --project-ref kqhffeiredwrhutffibg
 ```
 
-Depois apague o secret `VITE_ELEVEN_KEY` do GitHub Actions e refaça o deploy. O app percebe a ausência da variável e passa a usar o proxy sozinho — não há código a mudar.
+Nada muda no código nem exige novo deploy do site.
+
+> **Sobrou um detalhe cosmético:** o `deploy.yml` ainda tem a linha `VITE_ELEVEN_KEY: ${{ secrets.VITE_ELEVEN_KEY }}`. O secret foi apagado do GitHub, então ela vira string vazia e não faz nada — mas vale remover a linha numa próxima passada, para não confundir quem ler.
 
 ## Arquitetura
 
