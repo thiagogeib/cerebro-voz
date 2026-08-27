@@ -7,10 +7,13 @@ Uso familiar, não é produto comercial. Em produção: **vicente.ia.br**
 ## O que faz
 
 - **Grade de botões com emoji e frase**, organizada em árvore por categoria (sede, fome, dor, remédio, sair, sentimentos, família). A árvore fica em [`src/data/tree.js`](src/data/tree.js), comentada em português para a família editar sem mexer em componente.
+- **Botões com o nome da família.** Na aba 👥 da configuração dá para cadastrar as pessoas: o botão "Filho" vira "João" e a frase sai falada com o nome. A relação escolhida (filho, filha, esposa...) é o que define o artigo — "falar com **o** João", "falar com **a** Maria" — e a tela mostra a frase pronta antes de salvar. Nenhum nome fica no código.
 - **Três níveis** — básico (2 colunas, só o essencial), intermediário (3 colunas, tudo) e avançado (favoritas, sugestões por horário e escrita livre).
 - **Voz real** via ElevenLabs, com a voz do próprio Vicente. Cai na voz do aparelho (Web Speech API) se a ElevenLabs não responder.
 - **Escala de dor de 0 a 10**, dentro da categoria Dor.
 - **Painel admin** com frases mais usadas, histórico e acessos.
+
+A árvore é rasa de propósito: cada nível de navegação a mais é um toque a mais para alguém com dificuldade motora. Por isso as nove bebidas ficam todas na tela de "Sede", e os sete sentimentos todos na de "Me sinto", sem submenus.
 
 ## Funciona sem internet
 
@@ -61,6 +64,10 @@ Depois apague o secret `VITE_ELEVEN_KEY` do GitHub Actions e refaça o deploy. O
 ## Arquitetura
 
 Ver [ARCHITECTURE.md](ARCHITECTURE.md) — stack, schema do banco, RLS, fluxo de auth e os ADRs.
+
+## Banco
+
+Migrations em [`supabase/migrations/`](supabase/migrations/), aplicadas pelo SQL Editor ou `supabase db push`. A **003** é a mais recente: tabela `people` (nomes da família) e a coluna `usage_events.node_id`.
 
 ## Próximas etapas
 

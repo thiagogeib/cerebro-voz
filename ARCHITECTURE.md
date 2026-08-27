@@ -813,3 +813,102 @@ migrations é que estão defasadas.
 **Não foi mexido** por não dar para confirmar sem acesso ao banco. Vale
 conferir o estado real das policies e atualizar as migrations para bater com
 ele — o caminho usual é uma função `security definer` para checar o papel.
+
+---
+
+# Revisão de 2026-08-27 (parte 2) — nomes da família e árvore mais rasa
+
+Quatro pedidos vindos da família, depois de usar o app.
+
+## ADR-008: Botões com o nome real da família
+
+**Status:** Aceito
+
+**Contexto:** os botões de família eram genéricos — "Filho", "Filha", "Esposa".
+O Vicente sabe o nome de cada um; quem não sabia era o app. A frase saía na
+voz dele dizendo "quero falar com meu filho", quando o natural seria o nome.
+
+**Decisão:** cadastro de pessoas dentro do próprio app (aba 👥 da
+configuração), guardado na tabela `people` (migration 003) com o mesmo desenho
+de `favorites` — banco como fonte, `localStorage` como cache offline.
+
+A árvore em `tree.js` **continua estática**. Quem monta a versão final é
+`getCats(nivel, pessoas)`, uma função pura que injeta os nós de pessoa em
+`familia` e em `sair`. Sem ninguém cadastrado ela devolve a árvore escrita no
+arquivo, sem nenhuma transformação — o app do Vicente não muda até a família
+cadastrar a primeira pessoa.
+
+**Por que a `relacao` é obrigatória:** não é organização, é gramática. É ela
+que decide o artigo da frase falada — "falar com **o** João" / "falar com
+**a** Maria" — e a contração do "Casa **do**/**da**". Uma frase com artigo
+errado, dita na voz dele, soaria como erro dele. Por isso a tela de cadastro
+mostra a frase pronta antes de salvar.
+
+**Ids dos nós:** derivados do slug do nome (`falar_joao`), não do uuid do
+banco — o padrão delete-e-reinsere do `salvarPessoas` troca os uuids a cada
+gravação, o que daria ids instáveis nos relatórios. Nomes repetidos ganham
+sufixo (`falar_joao_2`).
+
+**Consequências:**
+- Renomear alguém cria uma série nova no painel (ver ADR-009).
+- Cadastro feito offline sobe na próxima vez que houver rede.
+- Quem cadastrou um filho perde o botão genérico "Filho"; quem não cadastrou
+  nenhuma filha continua com a "Filha" genérica.
+
+## ADR-009: `usage_events.node_id`
+
+**Status:** Aceito
+
+**Contexto:** ao implementar o ADR-008 descobriu-se que o `id` do nó **nunca
+era gravado**. O `trackEvent` mandava `phrase_label`, e o `PhrasesPage` agrupa
+por ele — apesar do comentário no topo do `tree.js` afirmar que o `id`
+"identifica a frase nos relatórios". Ou seja: renomear um botão sempre partiu
+a série histórica em duas, silenciosamente.
+
+**Decisão:** gravar `node_id` em `usage_events` (coluna aditiva e nula).
+
+**Consequências:** de agora em diante dá para seguir o mesmo botão mesmo que
+o rótulo mude — que é exatamente o que acontece quando "Filho" vira "João".
+Linhas antigas ficam com `node_id` nulo, e o painel segue agrupando por
+rótulo até que alguém queira mudá-lo.
+
+## ADR-010: Árvore mais rasa em vez de submenus
+
+**Status:** Aceito
+
+**Contexto:** dois pedidos empurravam para lados opostos — mais opções de
+bebida (laranja, uva, água de coco, café com açúcar e com adoçante) e menos
+cliques para dizer como está se sentindo.
+
+**Decisão:** achatar os dois.
+
+- **Sede** passou a ter as nove bebidas numa tela só, sem submenu de "suco" ou
+  "café". Um submenu economizaria espaço, mas cobraria um toque a mais em toda
+  pedida — inclusive na água e no café puro, que são as do dia a dia. Varrer a
+  tela com o olho é barato para ele (a cognição está preservada); o toque a
+  mais é que é caro.
+- **Me sinto** perdeu o nó "Mal" do meio: dizer "estou cansado" custava três
+  toques, agora custa dois. Os ids e rótulos das folhas não mudaram, então o
+  histórico continua.
+
+**Consequência de layout:** no nível básico (2 colunas) as nove bebidas não
+cabiam em tela de 667px — o "Chá" ficava abaixo da dobra, e rolar é um gesto
+que ele pode simplesmente não fazer. O botão que não aparece, para ele, não
+existe. Por isso, no básico, listas com mais de 6 itens usam botão de 84px em
+vez de 100px. Continua bem acima do mínimo confortável de toque, e tudo cabe
+sem rolagem.
+
+**"Cinco gotas" fixo na frase:** a quantidade é preferência pessoal e está
+escrita no `tree.js`, com comentário indicando onde mudar. Deixar isso
+configurável na interface criaria um áudio pago por variação, para resolver
+algo que muda uma vez a cada nunca.
+
+## Substituição do "Casa dos pais"
+
+O botão saiu (foi para a reserva comentada). Era o ponto em aberto anotado na
+revisão anterior: a frase "Quero ir na casa dos meus pais" provavelmente
+estava escrita do ponto de vista de quem anotou o papel, não do Vicente.
+
+No lugar, cada pessoa cadastrada pode ganhar um botão "Casa do João" em
+"Sair" — marcando uma caixa no cadastro. O mesmo cadastro resolve os dois
+lugares onde o nome importa.
