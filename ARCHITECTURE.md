@@ -695,3 +695,220 @@ supabase/functions/anthropic-proxy
 | Cold start da Edge Function atrasa personalização | Baixa | Baixo | Personalização já é async; fallback é a frase original |
 | localStorage antigo conflita com dados do Supabase | Alta | Médio | Na Fase 2, fazer migração única no primeiro login: ler localStorage, escrever no Supabase, limpar chaves antigas |
 | Rate limit ElevenLabs em uso intenso | Baixa | Médio | Já existe fallback para SpeechSynthesis; manter comportamento atual |
+
+---
+
+# Revisão de 2026-08-27 — offline, cache de áudio e chave da voz
+
+Mudanças posteriores ao documento acima. O que está escrito antes continua
+valendo; o que segue acrescenta ou corrige.
+
+## ADR-004: App offline-first (PWA)
+
+**Status:** Aceito
+
+**Contexto:** o app é o meio de fala de uma pessoa. Até aqui, ficar sem sinal
+significava ficar sem voz: nada era cacheado e o site simplesmente não abria.
+
+**Decisão:** service worker próprio (`public/sw.js`), escrito à mão em vez de
+`vite-plugin-pwa`, para não adicionar dependência de build e manter controle
+explícito do que é cacheado.
+
+Estratégias por tipo de requisição:
+
+| Requisição | Estratégia | Por quê |
+|---|---|---|
+| Abrir o app (navigate) | rede primeiro, cache como reserva | pega versão nova quando dá, mas nunca falha |
+| Arquivos do site | cache primeiro, atualiza atrás | resposta instantânea |
+| Fontes do Google | cache primeiro | não mudam |
+| Supabase e ElevenLabs | **sem cache** | resposta velha de API é pior que erro |
+
+**Consequências:** o app instala na tela inicial e abre sem rede. Uma versão
+nova só chega quando há internet — aceitável, já que o conteúdo é estável.
+
+## ADR-005: Cache do áudio das frases
+
+**Status:** Aceito
+
+**Contexto:** cada toque em um botão gerava uma requisição nova à ElevenLabs,
+mesmo sendo sempre as mesmas ~60 frases. Isso custava crédito a cada repetição
+e, pior, impunha a espera da rede antes de cada fala.
+
+**Decisão:** guardar o MP3 de cada frase falada na Cache Storage do navegador
+(`src/lib/audioCache.js`), chaveado por texto + voz. O TTS passa a consultar o
+cache antes de qualquer rede.
+
+**Consequências:**
+- A mesma frase só é gerada uma vez; da segunda em diante é instantânea, offline e de graça.
+- Trocar de voz gera os áudios de novo (a chave inclui a voz) — os antigos ficam guardados caso ele volte à voz anterior.
+- Teto de 300 frases, descartando as mais antigas.
+- A configuração mostra quantas frases estão guardadas, com botão para limpar.
+
+**Passo natural seguinte:** pré-gerar no build os áudios da árvore inteira e
+versioná-los, para que o app já nasça 100% offline em aparelho novo.
+
+## ADR-006: O app abre sem sessão válida em aparelho conhecido
+
+**Status:** Aceito
+
+**Contexto:** o JWT do Supabase expira. Sem rede para renovar — ou com o
+projeto free tier pausado — a sessão volta vazia e o `ProtectedRoute` mandava
+para a tela de login. Resultado: exatamente quando tudo está fora do ar, o
+Vicente perde o meio de falar. Além disso o endereço fica gravado em
+`#/login`, então ele ficava preso lá mesmo depois.
+
+**Decisão:** um login bem-sucedido grava a marca `voz_ja_logou` no aparelho.
+Enquanto ela existir, o app abre mesmo sem sessão. O botão "Sair" a apaga.
+A tela de login redireciona sozinha para o app quando detecta que o servidor
+está inalcançável, e oferece a saída manual "Sem internet? Entrar assim mesmo".
+
+**Por que é aceitável:** as frases são as mesmas para todo mundo e já estão no
+código do site público — não há segredo a proteger. Escrever no banco continua
+exigindo sessão válida (o RLS não mudou) e o painel admin continua exigindo
+sessão com `role = admin`.
+
+**Detalhe importante:** `navigator.onLine` não pode ser usado para essa
+detecção. Ele volta a reportar `true` assim que o service worker entrega a
+página do cache, mesmo sem rede alguma — confirmado em teste. Por isso
+`src/lib/conexao.js` testa a conectividade de verdade, com uma requisição
+curta ao Supabase.
+
+## ADR-007: Chave da ElevenLabs fora do navegador
+
+**Status:** Aceito — implementado, **falta deployar**
+
+**Contexto:** o ADR-001 tirou a chave da Anthropic do browser via Edge
+Function, mas a chave da ElevenLabs continuou sendo injetada no bundle pelo
+`deploy.yml`. Em um site público, é uma chave de API exposta.
+
+**Decisão:** Edge Function `tts-proxy`, mesmo padrão do `anthropic-proxy`:
+exige JWT, valida o tamanho do texto e aceita apenas as cinco vozes do app.
+
+A migração é por ausência de variável: com `VITE_ELEVEN_KEY` presente o app
+usa a rota direta (comportamento antigo); sem ela, usa o proxy. Assim o deploy
+da function e a remoção do secret podem acontecer em momentos diferentes, sem
+janela em que a voz pare de funcionar.
+
+**Pendente:** `supabase functions deploy tts-proxy`, `supabase secrets set
+ELEVEN_KEY=...` e remover `VITE_ELEVEN_KEY` do GitHub Actions.
+
+## Correções pontuais
+
+- **Sessão de analytics:** o listener de `visibilitychange` era registrado com uma função anônima e removido com outra referência — nunca era removido. Além disso, apagar a tela do celular encerrava a sessão e ela não reabria: tudo que ele falasse depois era gravado numa sessão já fechada. Agora ela reabre ao voltar.
+- **Fechamento da sessão:** era um `await` comum, que o navegador cancela ao fechar a aba. Passou a usar `fetch` com `keepalive`, direto na API REST, e `pagehide` no lugar de `beforeunload` (que o Safari do iPhone ignora).
+- **Travamento dos botões:** era um tempo fixo de 2,5s. Frase curta deixava ele esperando à toa; frase longa liberava no meio e a próxima cortava a anterior. Agora quem libera é o fim real do áudio, com limite de segurança. No caso da voz do aparelho há um limite estimado pelo tamanho do texto, porque nem todo aparelho dispara o evento de fim — e alguns aceitam o comando sem ter voz instalada, o que travaria os botões para sempre.
+- **`nivelInfo` sem guarda:** um valor inesperado em `profiles.nivel` derrubava a tela inteira. Agora cai no básico.
+- **`responsivevoice.js`:** carregado de CDN no `index.html` e não usado em lugar nenhum do código. Removido.
+- **Favoritas e histórico:** viviam só no `localStorage`. As favoritas passaram para a tabela `favorites` (que existia no schema desde o início e nunca havia sido usada), com migração automática do que já estava no aparelho; o histórico é reconstruído de `usage_events` quando ele abre num aparelho novo.
+- **Eventos offline:** `trackEvent` perdia o evento se a rede falhasse. Agora enfileira no `localStorage` e sobe no próximo acesso.
+
+## Observação não resolvida — recursão nas policies de `profiles`
+
+As policies "admin reads all" de `002_rls_policies.sql` consultam `profiles`
+dentro de uma policy da própria `profiles`, o que o Postgres normalmente
+rejeita com *infinite recursion detected in policy*. Como o painel admin
+funciona em produção, o banco real provavelmente já foi corrigido à mão e as
+migrations é que estão defasadas.
+
+**Não foi mexido** por não dar para confirmar sem acesso ao banco. Vale
+conferir o estado real das policies e atualizar as migrations para bater com
+ele — o caminho usual é uma função `security definer` para checar o papel.
+
+---
+
+# Revisão de 2026-08-27 (parte 2) — nomes da família e árvore mais rasa
+
+Quatro pedidos vindos da família, depois de usar o app.
+
+## ADR-008: Botões com o nome real da família
+
+**Status:** Aceito
+
+**Contexto:** os botões de família eram genéricos — "Filho", "Filha", "Esposa".
+O Vicente sabe o nome de cada um; quem não sabia era o app. A frase saía na
+voz dele dizendo "quero falar com meu filho", quando o natural seria o nome.
+
+**Decisão:** cadastro de pessoas dentro do próprio app (aba 👥 da
+configuração), guardado na tabela `people` (migration 003) com o mesmo desenho
+de `favorites` — banco como fonte, `localStorage` como cache offline.
+
+A árvore em `tree.js` **continua estática**. Quem monta a versão final é
+`getCats(nivel, pessoas)`, uma função pura que injeta os nós de pessoa em
+`familia` e em `sair`. Sem ninguém cadastrado ela devolve a árvore escrita no
+arquivo, sem nenhuma transformação — o app do Vicente não muda até a família
+cadastrar a primeira pessoa.
+
+**Por que a `relacao` é obrigatória:** não é organização, é gramática. É ela
+que decide o artigo da frase falada — "falar com **o** João" / "falar com
+**a** Maria" — e a contração do "Casa **do**/**da**". Uma frase com artigo
+errado, dita na voz dele, soaria como erro dele. Por isso a tela de cadastro
+mostra a frase pronta antes de salvar.
+
+**Ids dos nós:** derivados do slug do nome (`falar_joao`), não do uuid do
+banco — o padrão delete-e-reinsere do `salvarPessoas` troca os uuids a cada
+gravação, o que daria ids instáveis nos relatórios. Nomes repetidos ganham
+sufixo (`falar_joao_2`).
+
+**Consequências:**
+- Renomear alguém cria uma série nova no painel (ver ADR-009).
+- Cadastro feito offline sobe na próxima vez que houver rede.
+- Quem cadastrou um filho perde o botão genérico "Filho"; quem não cadastrou
+  nenhuma filha continua com a "Filha" genérica.
+
+## ADR-009: `usage_events.node_id`
+
+**Status:** Aceito
+
+**Contexto:** ao implementar o ADR-008 descobriu-se que o `id` do nó **nunca
+era gravado**. O `trackEvent` mandava `phrase_label`, e o `PhrasesPage` agrupa
+por ele — apesar do comentário no topo do `tree.js` afirmar que o `id`
+"identifica a frase nos relatórios". Ou seja: renomear um botão sempre partiu
+a série histórica em duas, silenciosamente.
+
+**Decisão:** gravar `node_id` em `usage_events` (coluna aditiva e nula).
+
+**Consequências:** de agora em diante dá para seguir o mesmo botão mesmo que
+o rótulo mude — que é exatamente o que acontece quando "Filho" vira "João".
+Linhas antigas ficam com `node_id` nulo, e o painel segue agrupando por
+rótulo até que alguém queira mudá-lo.
+
+## ADR-010: Árvore mais rasa em vez de submenus
+
+**Status:** Aceito
+
+**Contexto:** dois pedidos empurravam para lados opostos — mais opções de
+bebida (laranja, uva, água de coco, café com açúcar e com adoçante) e menos
+cliques para dizer como está se sentindo.
+
+**Decisão:** achatar os dois.
+
+- **Sede** passou a ter as nove bebidas numa tela só, sem submenu de "suco" ou
+  "café". Um submenu economizaria espaço, mas cobraria um toque a mais em toda
+  pedida — inclusive na água e no café puro, que são as do dia a dia. Varrer a
+  tela com o olho é barato para ele (a cognição está preservada); o toque a
+  mais é que é caro.
+- **Me sinto** perdeu o nó "Mal" do meio: dizer "estou cansado" custava três
+  toques, agora custa dois. Os ids e rótulos das folhas não mudaram, então o
+  histórico continua.
+
+**Consequência de layout:** no nível básico (2 colunas) as nove bebidas não
+cabiam em tela de 667px — o "Chá" ficava abaixo da dobra, e rolar é um gesto
+que ele pode simplesmente não fazer. O botão que não aparece, para ele, não
+existe. Por isso, no básico, listas com mais de 6 itens usam botão de 84px em
+vez de 100px. Continua bem acima do mínimo confortável de toque, e tudo cabe
+sem rolagem.
+
+**"Cinco gotas" fixo na frase:** a quantidade é preferência pessoal e está
+escrita no `tree.js`, com comentário indicando onde mudar. Deixar isso
+configurável na interface criaria um áudio pago por variação, para resolver
+algo que muda uma vez a cada nunca.
+
+## Substituição do "Casa dos pais"
+
+O botão saiu (foi para a reserva comentada). Era o ponto em aberto anotado na
+revisão anterior: a frase "Quero ir na casa dos meus pais" provavelmente
+estava escrita do ponto de vista de quem anotou o papel, não do Vicente.
+
+No lugar, cada pessoa cadastrada pode ganhar um botão "Casa do João" em
+"Sair" — marcando uma caixa no cadastro. O mesmo cadastro resolve os dois
+lugares onde o nome importa.
