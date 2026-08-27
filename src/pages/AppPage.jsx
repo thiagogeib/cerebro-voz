@@ -6,7 +6,7 @@ import { carregarFavoritas, salvarFavoritas } from "../lib/favoritas";
 import { carregarPessoas, salvarPessoas, lerPessoasLocal } from "../lib/pessoas";
 import { countCachedAudio, clearAudioCache } from "../lib/audioCache";
 import { useAuth } from "../hooks/useAuth";
-import { getCats, fraseFalarCom, rotuloCasaDe, RELACOES } from "../data/tree";
+import { getCats, getNosPessoas, fraseFalarCom, rotuloCasaDe, RELACOES } from "../data/tree";
 
 // Trava de segurança: se o áudio travar e nunca avisar que terminou, os botões
 // voltam a funcionar depois desse tempo. No caminho normal quem libera é o
@@ -116,7 +116,6 @@ export default function AppPage() {
   // Leitura síncrona do aparelho: os botões com nome precisam aparecer já na
   // primeira pintura, sem piscar os genéricos antes nem esperar a rede.
   const [pessoas, setPessoas] = useState(() => lerPessoasLocal());
-  const [pessoasDraft, setPessoasDraft] = useState([]);
 
   const sessionIdRef = useRef(null);
   const phraseCountRef = useRef(0);
@@ -295,9 +294,39 @@ export default function AppPage() {
     setFragmento("");
   };
 
+  // Cadastro de pessoa grava NA HORA — não existe mais rascunho.
+  //
+  // Antes era preciso tocar "Adicionar" e depois "Salvar", e havia três jeitos
+  // de perder o cadastro sem perceber: cancelar, tocar fora do modal (o gesto
+  // mais natural do celular para "terminei"), ou digitar o nome e ir direto no
+  // "Salvar" sem passar pelo "Adicionar" — este último jogava fora o que tinha
+  // acabado de ser digitado, sem aviso nenhum.
+  const cadastrarPessoa = useCallback((pessoa) => {
+    setPessoas(atual => {
+      const nova = [...atual, pessoa];
+      void salvarPessoas(user?.id, nova);   // localStorage na hora, banco em segundo plano
+      return nova;
+    });
+    setStack([]);
+  }, [user?.id]);
+
+  const removerPessoa = useCallback((indice) => {
+    setPessoas(atual => {
+      const nova = atual.filter((_, j) => j !== indice);
+      void salvarPessoas(user?.id, nova);
+      return nova;
+    });
+    setStack([]);
+  }, [user?.id]);
+
+  const abrirCadastroDeFamilia = useCallback(() => {
+    setFavDraft(favoritas);
+    setConfigTab("familia");
+    setShowConfig(true);
+  }, [favoritas]);
+
   const saveConfig = () => {
     setFavoritas(favDraft);
-    setPessoas(pessoasDraft);
     try {
       localStorage.setItem("voz_voice", selectedVoice);
       localStorage.setItem("voz_nivel", nivel);
@@ -305,7 +334,6 @@ export default function AppPage() {
 
     // Grava local na hora e sincroniza com o banco em segundo plano.
     void salvarFavoritas(user?.id, favDraft);
-    void salvarPessoas(user?.id, pessoasDraft);
 
     // O caminho aberto guarda os botões de ANTES do cadastro. Voltar para a
     // raiz evita que ele fique olhando uma tela que não existe mais.
@@ -329,6 +357,13 @@ export default function AppPage() {
   // que não aparece, para ele, não existe. Nessas telas o botão encolhe um
   // pouco em vez de sumir. 84px continua bem acima do mínimo confortável.
   const listaLonga = (currentNodes?.length || 0) > 6;
+
+  // Estamos dentro da categoria Família? É onde entra o atalho de cadastro.
+  const estaEmFamilia = stack.length > 0 && stack[stack.length - 1].id === "familia";
+
+  // No avançado não existe grade de categorias — as pessoas ganham uma seção
+  // própria, junto das favoritas.
+  const nosPessoas = getNosPessoas(pessoas);
   const BTN_HEIGHT = nivel === "basico" ? (listaLonga ? 84 : 100) : 82;
 
   return (
@@ -340,12 +375,12 @@ export default function AppPage() {
           <span style={{ fontSize: 10, color: "#8A7D6A", fontFamily: "'DM Sans',sans-serif", fontWeight: 500, letterSpacing: 0.3 }}>seu assistente de voz</span>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <span style={{ ...s.badge, cursor: "pointer" }} onClick={() => { setFavDraft(favoritas); setPessoasDraft(pessoas); setShowConfig(true); setConfigTab("nivel"); }}>
+          <span style={{ ...s.badge, cursor: "pointer" }} onClick={() => { setFavDraft(favoritas); setShowConfig(true); setConfigTab("nivel"); }}>
             {nivelInfo.icon} {nivelInfo.label}
           </span>
           {lastSpoken && <button style={s.replayBtn} onClick={() => speakElevenLabs(lastSpoken.frase, selectedVoice)}>🔊</button>}
-          <button style={s.cfgBtn} onClick={() => { setFavDraft(favoritas); setPessoasDraft(pessoas); setShowConfig(true); setConfigTab("voz"); }}>🎙️</button>
-          <button style={s.cfgBtn} onClick={() => { setFavDraft(favoritas); setPessoasDraft(pessoas); setShowConfig(true); setConfigTab("nivel"); }}>⚙️</button>
+          <button style={s.cfgBtn} onClick={() => { setFavDraft(favoritas); setShowConfig(true); setConfigTab("voz"); }}>🎙️</button>
+          <button style={s.cfgBtn} onClick={() => { setFavDraft(favoritas); setShowConfig(true); setConfigTab("nivel"); }}>⚙️</button>
           {profile?.role === "admin" && (
             <a href="#/admin" style={{ ...s.cfgBtn, textDecoration: "none", fontSize: 15 }} title="Painel admin">📊</a>
           )}
@@ -363,6 +398,25 @@ export default function AppPage() {
       {/* MODO AVANÇADO */}
       {nivel === "avancado" ? (
         <div style={s.wordsArea}>
+          {/* O avançado não tem grade de categorias, então as pessoas ganham
+              uma seção própria — senão elas simplesmente não existiriam neste
+              nível. O atalho de cadastro acompanha, como nos outros. */}
+          <div style={s.section}>
+            <div style={s.sectionTitle}>👨‍👩‍👧 Família</div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+              {nosPessoas.map((p) => (
+                <button key={p.id} style={s.favBtn} onClick={() => falarFrase(p)} disabled={speaking}>
+                  <span style={{ fontSize: 22 }}>{p.e}</span>
+                  <span style={s.favLabel}>{p.l}</span>
+                </button>
+              ))}
+              <button style={{ ...s.favBtn, ...s.btnAddPessoa, minHeight: 0 }} onClick={abrirCadastroDeFamilia}>
+                <span style={{ fontSize: 20, lineHeight: 1 }}>＋</span>
+                <span style={{ fontSize: 10, fontWeight: 600 }}>Cadastrar</span>
+              </button>
+            </div>
+          </div>
+
           {favoritas.length > 0 && (
             <div style={s.section}>
               <div style={s.sectionTitle}>⭐ Favoritas</div>
@@ -432,6 +486,22 @@ export default function AppPage() {
                   {node.filhos && <span style={s.navArrow}>›</span>}
                 </button>
               ))}
+
+              {/* Atalho para cadastrar, dentro da própria tela Família: é aqui
+                  que a família percebe que falta alguém. Fica no fim e com
+                  visual claramente diferente (tracejado, sem emoji grande),
+                  para não ser confundido com um botão de falar. */}
+              {estaEmFamilia && (
+                <button
+                  style={{ ...s.btnAddPessoa, minHeight: BTN_HEIGHT }}
+                  onClick={abrirCadastroDeFamilia}
+                >
+                  <span style={{ fontSize: 22, lineHeight: 1 }}>＋</span>
+                  <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: 0.3, textAlign: "center" }}>
+                    Cadastrar<br />pessoa
+                  </span>
+                </button>
+              )}
             </div>
           </div>
         </>
@@ -532,7 +602,7 @@ export default function AppPage() {
                   Cadastre a família pelo nome. O botão "Filho" vira "João", e a frase sai falada com o nome dele.
                 </div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 12 }}>
-                  {pessoasDraft.map((p, i) => (
+                  {pessoas.map((p, i) => (
                     <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", background: "#F5F0E8", borderRadius: 10 }}>
                       <span style={{ fontSize: 20 }}>{p.e}</span>
                       <div style={{ flex: 1, minWidth: 0 }}>
@@ -542,26 +612,36 @@ export default function AppPage() {
                           {p.casa && " · aparece no Sair"}
                         </div>
                       </div>
-                      <button onClick={() => setPessoasDraft(d => d.filter((_, j) => j !== i))}
+                      <button onClick={() => removerPessoa(i)}
                         style={{ background: "#E2D9C8", border: "none", borderRadius: 20, padding: "2px 10px", cursor: "pointer", color: "#8A7D6A", fontSize: 13 }}>
                         ✕
                       </button>
                     </div>
                   ))}
-                  {!pessoasDraft.length && (
+                  {!pessoas.length && (
                     <div style={{ fontSize: 12, color: "#8A7D6A", textAlign: "center", padding: "10px 0" }}>
                       Ninguém cadastrado — os botões seguem genéricos ("Filho", "Filha").
                     </div>
                   )}
                 </div>
-                <AddPessoa onAdd={p => setPessoasDraft(d => [...d, p])} />
+                <AddPessoa onCadastrar={cadastrarPessoa} />
               </>
             )}
 
-            <div style={s.sheetBtns}>
-              <button style={s.btnCancel} onClick={() => setShowConfig(false)}>Cancelar</button>
-              <button style={s.btnSave} onClick={saveConfig}>Salvar</button>
-            </div>
+            {/* Na aba de família não há o que salvar depois: cada cadastro já
+                foi gravado. Dois botões ali só criariam a dúvida de sempre —
+                "será que preciso salvar de novo?". O "Fechar" ainda chama o
+                saveConfig para não descartar mudança feita em outra aba antes. */}
+            {configTab === "familia" ? (
+              <div style={s.sheetBtns}>
+                <button style={s.btnSave} onClick={saveConfig}>Fechar</button>
+              </div>
+            ) : (
+              <div style={s.sheetBtns}>
+                <button style={s.btnCancel} onClick={() => setShowConfig(false)}>Cancelar</button>
+                <button style={s.btnSave} onClick={saveConfig}>Salvar</button>
+              </div>
+            )}
 
             <div style={s.sheetDev}>
               <a
@@ -642,105 +722,137 @@ function AddFavorita({ onAdd }) {
 
 const inputStyle = { width: "100%", border: "1.5px solid #E2D9C8", borderRadius: 10, padding: "8px 12px", fontSize: 13, background: "#FFFDF8", outline: "none", fontFamily: "'DM Sans',sans-serif" };
 
-// ─── ADD PESSOA ───────────────────────────────────────────────────────────────
+// ─── CADASTRAR PESSOA ─────────────────────────────────────────────────────────
 //
-// A relação (filho, filha, esposa...) não é só organização: é ela que decide o
-// artigo da frase — "falar com O João" ou "falar com A Maria". Por isso a
-// frase pronta aparece na tela antes de salvar: quem cadastra confere como vai
-// sair na voz dele.
-function AddPessoa({ onAdd }) {
+// Quem usa esta tela é a família, não o Vicente. Ela foi refeita depois de o
+// primeiro desenho se mostrar confuso na prática. O que mudou:
+//
+//   · Um botão só, que grava na hora. Antes eram "Adicionar" e depois
+//     "Salvar", e dava para perder o cadastro de três jeitos diferentes sem
+//     nenhum aviso.
+//   · O preview mostra o BOTÃO como ele vai ficar no app, e onde encontrá-lo.
+//     A dúvida de quem cadastra é "e agora, cadê?", não "que frase sai".
+//     A frase continua ali embaixo, porque é ela que revela um artigo errado.
+//   · As seis relações mais comuns ficam à vista; o resto abre sob demanda.
+//   · O rosto é escolhido pela relação. Trocar é possível, mas escondido —
+//     era uma grade de 24 emojis competindo com o que importa.
+const RELACOES_PRINCIPAIS = 6;
+
+const ROSTOS = ["👨", "👩", "🧑", "👴", "👵", "👦", "👧", "🧔", "👨‍🦳", "👩‍🦳", "👨‍🦰", "👩‍🦰"];
+
+function AddPessoa({ onCadastrar }) {
   const [nome, setNome] = useState("");
   const [relacao, setRelacao] = useState("filho");
   const [emoji, setEmoji] = useState("👨");
   const [casa, setCasa] = useState(false);
+  const [verOutras, setVerOutras] = useState(false);
+  const [trocarRosto, setTrocarRosto] = useState(false);
+  const [confirmado, setConfirmado] = useState("");
 
-  // Só rostos e figuras de gente. A categoria "pessoas" do seletor de
-  // favoritas traz coração, telefone e mãos — não servem para dizer QUEM é.
-  const emojisPessoas = [
-    "👨", "👩", "🧑", "👴", "👵", "👦", "👧", "👶",
-    "👨‍🦰", "👩‍🦰", "👨‍🦳", "👩‍🦳", "👨‍🦲", "🧔", "👳", "🧕",
-    "👨‍⚕️", "👩‍⚕️", "👨‍🌾", "👩‍🌾", "👮", "🧑‍🍳", "👨‍🏫", "👩‍🏫",
-  ];
-  const pronto = nome.trim().length > 0;
+  const limpo = nome.trim();
+  const pronto = limpo.length > 0;
+  const pessoa = { nome: limpo, relacao };
 
   const escolherRelacao = (r) => {
     setRelacao(r.id);
-    setEmoji(r.emoji);   // sugestão; dá para trocar logo abaixo
+    if (!trocarRosto) setEmoji(r.emoji);   // sugestão; só manda enquanto ninguém escolheu à mão
   };
 
-  const adicionar = () => {
+  const cadastrar = () => {
     if (!pronto) return;
-    onAdd({ nome: nome.trim(), e: emoji, relacao, casa });
+    onCadastrar({ nome: limpo, e: emoji, relacao, casa });
+    setConfirmado(limpo);
     setNome("");
     setCasa(false);
+    setTrocarRosto(false);
+    setTimeout(() => setConfirmado(""), 5000);
   };
 
+  const relacoesVisiveis = verOutras ? RELACOES : RELACOES.slice(0, RELACOES_PRINCIPAIS);
+
   return (
-    <div style={{ background: "#EAF2EF", borderRadius: 12, padding: 12 }}>
-      <div style={{ fontSize: 12, fontWeight: 700, color: "#5B7B6F", marginBottom: 8 }}>+ Nova pessoa</div>
+    <div style={s.cadastroBox}>
+      <div style={s.cadastroTitulo}>Cadastrar alguém</div>
+
+      {confirmado && (
+        <div style={s.confirmacao}>
+          ✓ <strong>{confirmado}</strong> cadastrado. O botão já está no app do Vicente.
+        </div>
+      )}
 
       <input
-        style={{ ...inputStyle, marginBottom: 8 }}
+        style={{ ...inputStyle, marginBottom: 10 }}
         value={nome}
         onChange={e => setNome(e.target.value)}
         placeholder="Nome (ex: João)"
-        onKeyDown={e => e.key === "Enter" && adicionar()}
+        onKeyDown={e => e.key === "Enter" && cadastrar()}
       />
 
-      {/* Relação — define o artigo da frase */}
-      <div style={{ display: "flex", gap: 4, overflowX: "auto", marginBottom: 8, paddingBottom: 2 }}>
-        {RELACOES.map(r => (
+      <div style={s.campoRotulo}>Quem é do Vicente</div>
+      <div style={s.relacoesGrade}>
+        {relacoesVisiveis.map(r => (
           <button
             key={r.id}
             onClick={() => escolherRelacao(r)}
-            style={{
-              flexShrink: 0, padding: "5px 10px", borderRadius: 20, fontSize: 12, cursor: "pointer",
-              border: "1.5px solid " + (relacao === r.id ? "#5B7B6F" : "#E2D9C8"),
-              background: relacao === r.id ? "#5B7B6F" : "#FFFDF8",
-              color: relacao === r.id ? "white" : "#8A7D6A",
-              fontFamily: "'DM Sans',sans-serif",
-            }}
+            style={{ ...s.relBtn, ...(relacao === r.id ? s.relBtnAtivo : {}) }}
           >
             {r.label}
           </button>
         ))}
       </div>
+      {!verOutras && (
+        <button style={s.linkDiscreto} onClick={() => setVerOutras(true)}>
+          outros parentescos ▾
+        </button>
+      )}
 
-      {/* Emoji do botão */}
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginBottom: 8 }}>
-        {emojisPessoas.map(em => (
-          <button
-            key={em}
-            onClick={() => setEmoji(em)}
-            style={{
-              width: 32, height: 32, fontSize: 17, cursor: "pointer", borderRadius: 8,
-              border: "1.5px solid " + (emoji === em ? "#5B7B6F" : "transparent"),
-              background: emoji === em ? "#FFFDF8" : "transparent",
-            }}
-          >
-            {em}
-          </button>
-        ))}
-      </div>
-
-      <label style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8, cursor: "pointer", fontSize: 12, color: "#2C2416" }}>
-        <input type="checkbox" checked={casa} onChange={e => setCasa(e.target.checked)} style={{ width: 16, height: 16 }} />
-        Criar também o botão "{rotuloCasaDe({ nome: nome.trim(), relacao })}" no Sair
+      <label style={s.checkboxLinha}>
+        <input type="checkbox" checked={casa} onChange={e => setCasa(e.target.checked)} style={{ width: 17, height: 17, flexShrink: 0 }} />
+        <span>
+          {pronto
+            ? <>Criar também o botão <strong>"{rotuloCasaDe(pessoa)}"</strong> na tela Sair</>
+            : <>Criar também um botão de "ir na casa" na tela Sair</>}
+        </span>
       </label>
 
-      {/* Confere como vai sair falado antes de salvar */}
-      <div style={{ background: "#FFFDF8", borderRadius: 10, padding: "8px 10px", marginBottom: 10 }}>
-        <div style={{ fontSize: 10, color: "#8A7D6A", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 2 }}>Vai falar</div>
-        <div style={{ fontSize: 13, color: "#2C2416", fontFamily: "'Lora',serif" }}>
-          {emoji} {fraseFalarCom({ nome: nome.trim(), relacao })}
+      {/* Como vai ficar — responde "e agora, cadê o botão?" */}
+      <div style={s.previewCard}>
+        <div style={s.previewTitulo}>Como vai ficar no app dele</div>
+        <div style={s.previewLinha}>
+          <span style={s.previewCaminho}>Família ›</span>
+          <div style={s.previewBotao}>
+            <span style={{ fontSize: 26, lineHeight: 1 }}>{emoji}</span>
+            <span style={s.previewBotaoLabel}>{limpo || "..."}</span>
+          </div>
+        </div>
+
+        {!trocarRosto ? (
+          <button style={s.linkDiscreto} onClick={() => setTrocarRosto(true)}>trocar a figura</button>
+        ) : (
+          <div style={s.rostosGrade}>
+            {ROSTOS.map(rosto => (
+              <button
+                key={rosto}
+                onClick={() => setEmoji(rosto)}
+                style={{ ...s.rostoBtn, ...(emoji === rosto ? s.rostoBtnAtivo : {}) }}
+              >
+                {rosto}
+              </button>
+            ))}
+          </div>
+        )}
+
+        <div style={s.previewFrase}>
+          Ao tocar, a voz fala: <em>{fraseFalarCom(pessoa)}</em>
         </div>
       </div>
 
       <button
-        style={{ width: "100%", padding: 10, background: pronto ? "#5B7B6F" : "#E2D9C8", color: pronto ? "white" : "#8A7D6A", border: "none", borderRadius: 10, fontWeight: 600, cursor: pronto ? "pointer" : "not-allowed", fontSize: 14 }}
-        onClick={adicionar}
+        style={{ ...s.btnCadastrar, ...(pronto ? {} : s.btnCadastrarInativo) }}
+        onClick={cadastrar}
+        disabled={!pronto}
       >
-        Adicionar
+        {pronto ? `Cadastrar ${limpo}` : "Cadastrar"}
       </button>
     </div>
   );
@@ -790,6 +902,30 @@ const s = {
   voiceTestBtn: { width: 30, height: 30, background: "#5B7B6F", color: "white", border: "none", borderRadius: "50%", fontSize: 11, cursor: "pointer", flexShrink: 0 },
   cacheBox: { display: "flex", alignItems: "center", gap: 10, marginTop: 12, padding: "10px 12px", background: "#EAF2EF", borderRadius: 12 },
   cacheBtn: { background: "#E2D9C8", color: "#8A7D6A", border: "none", borderRadius: 20, padding: "6px 14px", fontSize: 12, cursor: "pointer", flexShrink: 0 },
+  // ── cadastro de pessoas ──
+  cadastroBox: { background: "#EAF2EF", borderRadius: 12, padding: 12 },
+  cadastroTitulo: { fontSize: 12, fontWeight: 700, color: "#5B7B6F", marginBottom: 8 },
+  confirmacao: { background: "#FFFDF8", border: "1.5px solid #5B7B6F", borderRadius: 10, padding: "8px 10px", fontSize: 12, color: "#2C2416", marginBottom: 10 },
+  campoRotulo: { fontSize: 11, color: "#8A7D6A", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 },
+  relacoesGrade: { display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 6 },
+  relBtn: { padding: "9px 4px", borderRadius: 10, fontSize: 12, cursor: "pointer", border: "1.5px solid #E2D9C8", background: "#FFFDF8", color: "#8A7D6A", fontFamily: "'DM Sans',sans-serif" },
+  relBtnAtivo: { border: "1.5px solid #5B7B6F", background: "#5B7B6F", color: "white", fontWeight: 600 },
+  linkDiscreto: { background: "none", border: "none", color: "#8A7D6A", fontSize: 11, cursor: "pointer", padding: "6px 0", fontFamily: "'DM Sans',sans-serif", textDecoration: "underline" },
+  checkboxLinha: { display: "flex", alignItems: "flex-start", gap: 8, margin: "8px 0", cursor: "pointer", fontSize: 12, color: "#2C2416", lineHeight: 1.35 },
+  previewCard: { background: "#FFFDF8", borderRadius: 10, padding: 10, marginBottom: 10 },
+  previewTitulo: { fontSize: 10, color: "#8A7D6A", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8 },
+  previewLinha: { display: "flex", alignItems: "center", gap: 10 },
+  previewCaminho: { fontSize: 12, color: "#8A7D6A" },
+  previewBotao: { background: "#FFFDF8", border: "1.5px solid #E2D9C8", borderRadius: 12, padding: "8px 14px", display: "flex", flexDirection: "column", alignItems: "center", gap: 3, minWidth: 78 },
+  previewBotaoLabel: { fontSize: 11, fontWeight: 700, letterSpacing: 0.5, textTransform: "uppercase", color: "#2C2416" },
+  rostosGrade: { display: "flex", flexWrap: "wrap", gap: 4, marginTop: 8 },
+  rostoBtn: { width: 32, height: 32, fontSize: 17, cursor: "pointer", borderRadius: 8, border: "1.5px solid transparent", background: "transparent" },
+  rostoBtnAtivo: { border: "1.5px solid #5B7B6F", background: "#F5F0E8" },
+  previewFrase: { fontSize: 12, color: "#8A7D6A", marginTop: 8, fontFamily: "'Lora',serif", lineHeight: 1.4 },
+  btnCadastrar: { width: "100%", padding: 12, background: "#5B7B6F", color: "white", border: "none", borderRadius: 10, fontWeight: 700, cursor: "pointer", fontSize: 14 },
+  btnCadastrarInativo: { background: "#E2D9C8", color: "#8A7D6A", cursor: "not-allowed" },
+  // atalho de cadastro dentro da propria tela Familia
+  btnAddPessoa: { display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 4, background: "transparent", border: "1.5px dashed #C9BCA6", borderRadius: 14, cursor: "pointer", color: "#8A7D6A", fontFamily: "'DM Sans',sans-serif", padding: 8 },
   sheetBtns: { display: "flex", gap: 8, marginTop: 16 },
   btnSave: { flex: 1, padding: 13, background: "#5B7B6F", color: "white", border: "none", borderRadius: 12, fontSize: 15, fontWeight: 600, cursor: "pointer" },
   btnCancel: { padding: "13px 18px", background: "#E2D9C8", color: "#8A7D6A", border: "none", borderRadius: 12, fontSize: 15, cursor: "pointer" },

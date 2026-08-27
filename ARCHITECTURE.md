@@ -970,3 +970,64 @@ O `deploy.yml` ainda referencia `VITE_ELEVEN_KEY`. Como o secret foi apagado,
 a variável chega vazia ao build e o app usa o proxy — funciona corretamente.
 A linha não foi removida porque o token usado nesta sessão não tinha permissão
 para alterar arquivos de workflow. Vale limpar numa próxima passada.
+
+---
+
+## ADR-011: Cadastro de pessoas sem rascunho, e pessoas em todos os níveis
+
+**Status:** Aceito — 27/08/2026, depois do primeiro uso real
+
+**Contexto:** o cadastro entregue no ADR-008 funcionava, mas o dono do projeto
+usou e disse: *"tô achando muito difícil essa parte dos filhos"*. A revisão
+achou três jeitos de perder um cadastro **sem nenhum aviso**:
+
+1. tocar "Adicionar" e depois "Cancelar";
+2. tocar "Adicionar" e fechar tocando fora do modal — o gesto mais natural do
+   celular para "terminei";
+3. **digitar o nome e ir direto no "Salvar"**, sem passar pelo "Adicionar" —
+   o que tinha acabado de ser digitado era simplesmente descartado.
+
+O terceiro é o mais provável de acontecer na primeira vez que alguém usa. Não
+era uma tela difícil: era uma armadilha.
+
+**Decisão:**
+
+- **Fim do rascunho de pessoas.** "Cadastrar" grava na hora — `localStorage`
+  imediato, banco em segundo plano — e a tela confirma: *"Maria cadastrada. O
+  botão já está no app do Vicente."* Fechar deixou de ter consequência.
+- **Um botão só.** Na aba de família o rodapé vira apenas "Fechar" (que ainda
+  chama `saveConfig`, para não descartar mudança feita em outra aba). Nas
+  outras abas, o par Cancelar/Salvar continua como era.
+- **O preview responde a pergunta certa.** Antes mostrava a frase falada; a
+  dúvida de quem cadastra é *"e agora, cadê o botão?"*. Agora mostra o botão
+  desenhado como vai ficar, sob o caminho "Família ›". A frase continua ali
+  embaixo — é ela que revela um artigo errado antes de sair na voz dele.
+- **Menos ruído:** seis relações em grade (as outras seis abrem sob demanda) e
+  a grade de 24 emojis sai de cena — a relação já sugere um rosto, e "trocar a
+  figura" fica atrás de um toque.
+
+**Pessoas em todos os níveis.** Antes os botões com nome só existiam no
+Intermediário, porque é lá que vive a categoria `familia`. Quem usasse o
+Básico cadastrava e não via nada — provavelmente metade da sensação de
+"não funcionou".
+
+- **Básico:** a categoria Família é acrescentada ao **fim** da grade. Isso
+  importa: o básico tem 7 botões em 2 colunas, então a última linha tinha uma
+  célula vazia. Entrando nela, **nenhum botão que o Vicente já reconhece muda
+  de lugar** — ele localiza por posição e emoji. Só aparece se houver alguém
+  cadastrado, e leva só as pessoas (sem os genéricos).
+- **Avançado:** não tem grade de categorias, então as pessoas ganham uma seção
+  própria (`getNosPessoas`), junto das favoritas.
+- O `id` do botão é o mesmo nos três níveis (`falar_joao`), então o `node_id`
+  do ADR-009 não parte séries entre níveis.
+
+**Atalho onde a falta é percebida.** Dentro da própria tela Família há um
+botão tracejado "＋ Cadastrar pessoa" que abre o cadastro direto. É ali que a
+família nota que falta alguém. O visual é propositalmente diferente dos botões
+de falar (tracejado, sem emoji grande, texto pequeno) para não ser confundido
+com um botão de fala pelo Vicente.
+
+**O que não mudou, de propósito:** o fluxo de rascunho das favoritas. É a
+mesma família de problema, mas mudar as duas coisas ao mesmo tempo amplia o
+raio do que pode quebrar. Se o novo fluxo agradar, migrar favoritas fica
+óbvio e barato.

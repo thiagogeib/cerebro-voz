@@ -212,11 +212,36 @@ export function getCats(nivel, pessoas = []) {
 
   const comChave = idsUnicos(pessoas);
 
-  return base.map(cat => {
+  const arvore = base.map(cat => {
     if (cat.id === "familia") return { ...cat, filhos: injetarFamilia(cat.filhos, comChave) };
     if (cat.id === "sair")    return { ...cat, filhos: injetarCasas(cat.filhos, comChave) };
     return cat;
   });
+
+  // No básico não existe a categoria "Família" — ela é acrescentada aqui, no
+  // FIM da grade. Não é detalhe: o básico tem 7 botões em 2 colunas, então a
+  // última linha tem uma célula vazia. Entrando nela, nenhum botão que o
+  // Vicente já reconhece muda de lugar.
+  //
+  // Só as pessoas com nome entram (sem "Filho"/"Filha" genéricos): no básico
+  // a ideia é ter só o essencial, e genérico aqui traria de volta a confusão
+  // que o cadastro veio resolver.
+  if (nivel === "basico") {
+    arvore.push({ id: "familia", e: "👨‍👩‍👧", l: "Família", filhos: comChave.map(noFalarCom) });
+  }
+
+  return arvore;
+}
+
+/**
+ * Os botões de falar com as pessoas, soltos.
+ *
+ * Usado pelo nível avançado, que não tem grade de categorias — lá as pessoas
+ * aparecem numa seção própria, junto das favoritas.
+ */
+export function getNosPessoas(pessoas = []) {
+  if (!pessoas.length) return [];
+  return idsUnicos(pessoas).map(noFalarCom);
 }
 
 /** Usada pela tela de cadastro para mostrar a frase antes de salvar. */
