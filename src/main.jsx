@@ -27,3 +27,14 @@ ReactDOM.createRoot(document.getElementById('root')).render(
     </HashRouter>
   </React.StrictMode>
 )
+
+// Service worker: é ele que faz o app abrir sem internet e permite instalar
+// na tela inicial do celular. Em desenvolvimento fica desligado para não
+// servir arquivo velho durante a edição.
+if ('serviceWorker' in navigator && import.meta.env.PROD) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch(err => {
+      console.warn('Service worker não registrado:', err.message)
+    })
+  })
+}
