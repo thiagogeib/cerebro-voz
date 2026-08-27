@@ -116,6 +116,7 @@ export default function AppPage() {
   // Leitura síncrona do aparelho: os botões com nome precisam aparecer já na
   // primeira pintura, sem piscar os genéricos antes nem esperar a rede.
   const [pessoas, setPessoas] = useState(() => lerPessoasLocal());
+  const [editando, setEditando] = useState(null);   // indice da pessoa em edicao
 
   const sessionIdRef = useRef(null);
   const phraseCountRef = useRef(0);
@@ -316,10 +317,25 @@ export default function AppPage() {
       void salvarPessoas(user?.id, nova);
       return nova;
     });
+    setEditando(null);
+    setStack([]);
+  }, [user?.id]);
+
+  // Editar corrige o que já existe em vez de obrigar a apagar e cadastrar de
+  // novo — serve para um nome escrito errado, um apelido que pegou, ou marcar
+  // o "Casa de" depois.
+  const atualizarPessoa = useCallback((indice, pessoa) => {
+    setPessoas(atual => {
+      const nova = atual.map((p, j) => (j === indice ? pessoa : p));
+      void salvarPessoas(user?.id, nova);
+      return nova;
+    });
+    setEditando(null);
     setStack([]);
   }, [user?.id]);
 
   const abrirCadastroDeFamilia = useCallback(() => {
+    setEditando(null);
     setFavDraft(favoritas);
     setConfigTab("familia");
     setShowConfig(true);
@@ -603,17 +619,27 @@ export default function AppPage() {
                 </div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 12 }}>
                   {pessoas.map((p, i) => (
-                    <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", background: "#F5F0E8", borderRadius: 10 }}>
+                    <div key={i} style={{ ...s.pessoaLinha, ...(editando === i ? s.pessoaLinhaEditando : {}) }}>
                       <span style={{ fontSize: 20 }}>{p.e}</span>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ fontSize: 13, fontWeight: 700, color: "#2C2416" }}>{p.nome}</div>
                         <div style={{ fontSize: 11, color: "#8A7D6A" }}>
-                          {RELACOES.find(r => r.id === p.relacao)?.label || p.relacao}
-                          {p.casa && " · aparece no Sair"}
+                          {editando === i
+                            ? "editando abaixo..."
+                            : <>
+                                {RELACOES.find(r => r.id === p.relacao)?.label || p.relacao}
+                                {p.casa && " · aparece no Sair"}
+                              </>}
                         </div>
                       </div>
-                      <button onClick={() => removerPessoa(i)}
-                        style={{ background: "#E2D9C8", border: "none", borderRadius: 20, padding: "2px 10px", cursor: "pointer", color: "#8A7D6A", fontSize: 13 }}>
+                      <button
+                        onClick={() => setEditando(editando === i ? null : i)}
+                        style={s.pessoaAcao}
+                        title="Editar"
+                      >
+                        ✏️
+                      </button>
+                      <button onClick={() => removerPessoa(i)} style={s.pessoaAcao} title="Apagar">
                         ✕
                       </button>
                     </div>
@@ -624,7 +650,13 @@ export default function AppPage() {
                     </div>
                   )}
                 </div>
-                <AddPessoa onCadastrar={cadastrarPessoa} />
+                <AddPessoa
+                  key={editando === null ? 'novo' : `edita-${editando}`}
+                  inicial={editando === null ? null : pessoas[editando]}
+                  onCadastrar={cadastrarPessoa}
+                  onAtualizar={(p) => atualizarPessoa(editando, p)}
+                  onCancelarEdicao={() => setEditando(null)}
+                />
               </>
             )}
 
@@ -740,11 +772,14 @@ const RELACOES_PRINCIPAIS = 6;
 
 const ROSTOS = ["👨", "👩", "🧑", "👴", "👵", "👦", "👧", "🧔", "👨‍🦳", "👩‍🦳", "👨‍🦰", "👩‍🦰"];
 
-function AddPessoa({ onCadastrar }) {
-  const [nome, setNome] = useState("");
-  const [relacao, setRelacao] = useState("filho");
-  const [emoji, setEmoji] = useState("👨");
-  const [casa, setCasa] = useState(false);
+function AddPessoa({ inicial, onCadastrar, onAtualizar, onCancelarEdicao }) {
+  // Em edição o componente é remontado (via `key`), então os campos já nascem
+  // com os dados da pessoa — sem efeito para sincronizar depois.
+  const editando = !!inicial;
+  const [nome, setNome] = useState(inicial?.nome || "");
+  const [relacao, setRelacao] = useState(inicial?.relacao || "filho");
+  const [emoji, setEmoji] = useState(inicial?.e || "👨");
+  const [casa, setCasa] = useState(!!inicial?.casa);
   const [verOutras, setVerOutras] = useState(false);
   const [trocarRosto, setTrocarRosto] = useState(false);
   const [confirmado, setConfirmado] = useState("");
@@ -755,12 +790,19 @@ function AddPessoa({ onCadastrar }) {
 
   const escolherRelacao = (r) => {
     setRelacao(r.id);
-    if (!trocarRosto) setEmoji(r.emoji);   // sugestão; só manda enquanto ninguém escolheu à mão
+    if (!trocarRosto && !editando) setEmoji(r.emoji);   // sugestão; só enquanto ninguém escolheu à mão
   };
 
-  const cadastrar = () => {
+  const confirmar = () => {
     if (!pronto) return;
-    onCadastrar({ nome: limpo, e: emoji, relacao, casa });
+    const pessoa = { nome: limpo, e: emoji, relacao, casa };
+
+    if (editando) {
+      onAtualizar(pessoa);   // quem fecha a edição é o AppPage
+      return;
+    }
+
+    onCadastrar(pessoa);
     setConfirmado(limpo);
     setNome("");
     setCasa(false);
@@ -772,7 +814,9 @@ function AddPessoa({ onCadastrar }) {
 
   return (
     <div style={s.cadastroBox}>
-      <div style={s.cadastroTitulo}>Cadastrar alguém</div>
+      <div style={s.cadastroTitulo}>
+        {editando ? `Editando ${inicial.nome}` : "Cadastrar alguém"}
+      </div>
 
       {confirmado && (
         <div style={s.confirmacao}>
@@ -785,7 +829,7 @@ function AddPessoa({ onCadastrar }) {
         value={nome}
         onChange={e => setNome(e.target.value)}
         placeholder="Nome (ex: João)"
-        onKeyDown={e => e.key === "Enter" && cadastrar()}
+        onKeyDown={e => e.key === "Enter" && confirmar()}
       />
 
       <div style={s.campoRotulo}>Quem é do Vicente</div>
@@ -849,11 +893,19 @@ function AddPessoa({ onCadastrar }) {
 
       <button
         style={{ ...s.btnCadastrar, ...(pronto ? {} : s.btnCadastrarInativo) }}
-        onClick={cadastrar}
+        onClick={confirmar}
         disabled={!pronto}
       >
-        {pronto ? `Cadastrar ${limpo}` : "Cadastrar"}
+        {editando
+          ? (pronto ? `Salvar ${limpo}` : "Salvar")
+          : (pronto ? `Cadastrar ${limpo}` : "Cadastrar")}
       </button>
+
+      {editando && (
+        <button style={{ ...s.linkDiscreto, width: "100%", marginTop: 6 }} onClick={onCancelarEdicao}>
+          cancelar a edição
+        </button>
+      )}
     </div>
   );
 }
@@ -903,6 +955,9 @@ const s = {
   cacheBox: { display: "flex", alignItems: "center", gap: 10, marginTop: 12, padding: "10px 12px", background: "#EAF2EF", borderRadius: 12 },
   cacheBtn: { background: "#E2D9C8", color: "#8A7D6A", border: "none", borderRadius: 20, padding: "6px 14px", fontSize: 12, cursor: "pointer", flexShrink: 0 },
   // ── cadastro de pessoas ──
+  pessoaLinha: { display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", background: "#F5F0E8", borderRadius: 10, border: "1.5px solid transparent" },
+  pessoaLinhaEditando: { border: "1.5px solid #5B7B6F", background: "#EAF2EF" },
+  pessoaAcao: { background: "#E2D9C8", border: "none", borderRadius: 20, padding: "3px 9px", cursor: "pointer", color: "#8A7D6A", fontSize: 13, flexShrink: 0 },
   cadastroBox: { background: "#EAF2EF", borderRadius: 12, padding: 12 },
   cadastroTitulo: { fontSize: 12, fontWeight: 700, color: "#5B7B6F", marginBottom: 8 },
   confirmacao: { background: "#FFFDF8", border: "1.5px solid #5B7B6F", borderRadius: 10, padding: "8px 10px", fontSize: 12, color: "#2C2416", marginBottom: 10 },
