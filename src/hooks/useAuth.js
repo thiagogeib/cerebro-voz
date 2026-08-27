@@ -1,6 +1,19 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 
+// Marca que este aparelho já teve um login bem-sucedido. É o que autoriza o
+// app a continuar abrindo quando não há internet para renovar a sessão
+// (ver src/components/ProtectedRoute.jsx).
+const CHAVE_JA_LOGOU = 'voz_ja_logou'
+
+export function jaLogouNesteAparelho() {
+  try { return localStorage.getItem(CHAVE_JA_LOGOU) === '1' } catch { return false }
+}
+
+function marcarLogin() {
+  try { localStorage.setItem(CHAVE_JA_LOGOU, '1') } catch {}
+}
+
 export function useAuth() {
   const [user, setUser] = useState(null)
   const [session, setSession] = useState(null)
@@ -34,6 +47,7 @@ export function useAuth() {
       .then(({ data: { session: currentSession } }) => {
         setSession(currentSession)
         setUser(currentSession?.user ?? null)
+        if (currentSession?.user) marcarLogin()
         return loadProfile(currentSession?.user?.id ?? null)
       })
       .catch(() => {})
@@ -42,6 +56,7 @@ export function useAuth() {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, newSession) => {
       setSession(newSession)
       setUser(newSession?.user ?? null)
+      if (newSession?.user) marcarLogin()
       loadProfile(newSession?.user?.id ?? null)
     })
 
@@ -49,6 +64,8 @@ export function useAuth() {
   }, [])
 
   async function signOut() {
+    // Sair de verdade: o app volta a exigir login mesmo sem internet.
+    try { localStorage.removeItem(CHAVE_JA_LOGOU) } catch {}
     await supabase.auth.signOut()
     setUser(null)
     setSession(null)

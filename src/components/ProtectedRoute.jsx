@@ -1,8 +1,21 @@
 import { Navigate } from 'react-router-dom'
-import { useAuth } from '../hooks/useAuth'
+import { useAuth, jaLogouNesteAparelho } from '../hooks/useAuth'
 
 export default function ProtectedRoute({ children, requireRole }) {
   const { user, profile, loading } = useAuth()
+
+  // Quando o Supabase não responde — sem internet, sinal ruim, ou o projeto
+  // free tier pausado — a sessão volta vazia. Mandar para a tela de login
+  // nesse momento tiraria do Vicente o único jeito que ele tem de falar,
+  // justamente na hora em que nada está funcionando.
+  //
+  // Então, num aparelho onde ele já entrou e não saiu, o app continua
+  // abrindo. Nada sensível fica exposto: as frases são as mesmas para todo
+  // mundo e já estão no código do site; gravar qualquer coisa no banco
+  // continua exigindo sessão válida, e o painel admin (requireRole) também.
+  //
+  // A marca é apagada no "Sair" — logout de verdade volta a exigir login.
+  const modoOffline = !user && !requireRole && jaLogouNesteAparelho()
 
   if (loading) {
     return (
@@ -35,7 +48,7 @@ export default function ProtectedRoute({ children, requireRole }) {
     )
   }
 
-  if (!user) {
+  if (!user && !modoOffline) {
     return <Navigate to="/login" replace />
   }
 

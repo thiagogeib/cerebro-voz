@@ -1,6 +1,8 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+import { jaLogouNesteAparelho } from '../hooks/useAuth'
+import { temConexao } from '../lib/conexao'
 
 const ERRORS = {
   'Invalid login credentials': 'E-mail ou senha incorretos.',
@@ -30,6 +32,21 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const [success, setSuccess] = useState(null)
+
+  // Aparelho onde ele já entrou uma vez pode usar o app sem conseguir falar
+  // com o servidor.
+  const podeUsarOffline = jaLogouNesteAparelho()
+
+  // Sem servidor não há como logar, e o endereço fica gravado em #/login: sem
+  // isto o app ficaria preso nesta tela justamente quando o sinal cai.
+  useEffect(() => {
+    if (!podeUsarOffline) return
+    let vivo = true
+    temConexao().then(online => {
+      if (vivo && !online) navigate('/app', { replace: true })
+    })
+    return () => { vivo = false }
+  }, [podeUsarOffline, navigate])
 
   async function handleLogin(e) {
     e.preventDefault()
@@ -203,6 +220,19 @@ export default function LoginPage() {
             </>
           )}
         </div>
+
+        {/* SAÍDA DE EMERGÊNCIA — servidor fora do ar, internet instável.
+            Só aparece em aparelho onde ele já entrou antes. */}
+        {isLogin && podeUsarOffline && (
+          <div style={{ textAlign: 'center', marginTop: 4 }}>
+            <button
+              onClick={() => navigate('/app', { replace: true })}
+              style={{ ...s.switchLink, fontSize: 12 }}
+            >
+              Sem internet? Entrar assim mesmo →
+            </button>
+          </div>
+        )}
 
         {/* CONTATO DESENVOLVEDOR */}
         <div style={s.devContact}>
