@@ -5,7 +5,10 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "node test/run.mjs",
+    "test:arvore": "node test/arvore.test.mjs",
+    "test:app": "vite --config vite.config.test.js --port 5199"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.49.4",
@@ -15,6 +18,7 @@
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.2.1",
-    "vite": "^5.1.0"
+    "vite": "^5.1.0",
+    "puppeteer-core": "^23.0.0"
   }
 }

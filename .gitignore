@@ -6,3 +6,6 @@ dist
 
 # temporarios do supabase cli
 supabase/.temp/
+
+# screenshots gerados pelos testes
+test/*.png
