@@ -29,16 +29,46 @@ export async function startSession(userId) {
   // Aproveita que tem rede para mandar o que ficou pendente.
   void flushFila()
 
+  // O id é gerado AQUI, não lido de volta do banco.
+  //
+  // Antes era `insert(...).select('id')`, e a leitura dependia de uma permissão
+  // que a tabela não tinha: a linha era criada, mas o id voltava vazio. Sem
+  // id, todo evento era gravado órfão (412 de 425 em produção) e a sessão
+  // nunca era encerrada. Gerando o id no cliente, a sessão funciona mesmo que
+  // a leitura falhe — e o insert deixa de precisar de resposta.
+  const id = novoId()
+
   try {
-    const { data } = await supabase
+    const { error } = await supabase
       .from('sessions')
-      .insert({ user_id: userId, device_info: deviceInfo })
-      .select('id')
-      .single()
-    return data?.id ?? null
+      .insert({ id, user_id: userId, device_info: deviceInfo })
+
+    if (error) return null
+
+    // "Último acesso" do painel. A coluna existia desde o início e ninguém
+    // escrevia nela — a coluna inteira vivia vazia.
+    void supabase
+      .from('profiles')
+      .update({ last_seen_at: new Date().toISOString() })
+      .eq('id', userId)
+      .then(() => {})
+
+    return id
   } catch {
     return null
   }
+}
+
+/** UUID v4 — usa o do navegador quando existe, com alternativa manual. */
+function novoId() {
+  try {
+    if (crypto?.randomUUID) return crypto.randomUUID()
+  } catch {}
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+    const r = (Math.random() * 16) | 0
+    const v = c === 'x' ? r : (r & 0x3) | 0x8
+    return v.toString(16)
+  })
 }
 
 export function trackEvent(event) {
