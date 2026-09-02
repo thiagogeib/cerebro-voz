@@ -1031,3 +1031,79 @@ com um botão de fala pelo Vicente.
 mesma família de problema, mas mudar as duas coisas ao mesmo tempo amplia o
 raio do que pode quebrar. Se o novo fluxo agradar, migrar favoritas fica
 óbvio e barato.
+
+---
+
+# Revisão de 2026-09-01 — o painel admin
+
+## ADR-012: A sessão de uso nunca se ligava aos eventos
+
+**Status:** Corrigido (migration 004)
+
+**Contexto:** o painel mostrava sessões de duração desconhecida e zero frases
+em dias com mais de cem frases faladas. Rodando as queries de cada página
+contra produção, a causa apareceu: a tabela `sessions` tinha policy de INSERT
+e de UPDATE para o usuário, e de SELECT **só para o admin**.
+
+O app criava a sessão com `insert(...).select('id')`. O INSERT funcionava e a
+linha nascia — mas a leitura voltava vazia, porque ler exigia uma permissão
+que não existia. Sem o id da sessão:
+
+- **412 de 425 eventos** foram gravados com `session_id` nulo;
+- `endSession` desistia na primeira linha (`if (!sessionId) return`), então
+  `phrase_count` e `ended_at` quase nunca eram preenchidos.
+
+A migration 002 previa essa policy. O banco nunca a teve.
+
+**Decisão:** duas correções, em camadas diferentes.
+
+1. A policy que faltava (migration 004).
+2. O id da sessão passa a ser **gerado no cliente** (`crypto.randomUUID`). Com
+   isso o insert deixa de precisar de resposta, e a sessão funciona mesmo que
+   a leitura falhe por qualquer motivo.
+
+**Consequência:** o painel passou a contar as frases pelos eventos ligados à
+sessão, em vez de confiar no `phrase_count` — o que também conserta a
+apresentação do histórico antigo, sem reescrever dado nenhum.
+
+## ADR-013: O painel responde perguntas, não só lista tabelas
+
+**Status:** Aceito
+
+**Contexto:** o painel tinha quatro listas (usuários, frases, histórico,
+sessões) e não respondia o que a família realmente pergunta: ele está usando?
+quando? o que mais pede? tem sentido dor? Os dados estavam no banco desde
+maio; ninguém nunca os tinha olhado juntos.
+
+**Decisão:** uma página **Visão geral** como entrada do painel, agregando no
+cliente (o volume é de centenas de linhas, não milhões):
+
+- números do período, rotina por hora do dia, frases por dia;
+- **a curva de dor registrada, com média** — a escala de 0 a 10 já era usada
+  pelo Vicente e nunca tinha sido mostrada em lugar nenhum;
+- **alerta de dor 8+ nos últimos 7 dias**, no topo: é a única informação do
+  painel que pode exigir uma atitude no mesmo dia;
+- o que ele mais pede e por onde fala (botão, favorita, digitado);
+- **botões nunca usados**, cruzando a árvore com os eventos — serve para podar
+  a grade, e uma grade menor é mais rápida de varrer;
+- **exportar em CSV**, para levar a curva de dor a uma consulta.
+
+**Correções junto:** "Último acesso" era uma coluna vazia para 100% das contas
+(`last_seen_at` nunca fora escrito por ninguém desde a 001); a lista de
+usuários não dizia quem usava o app entre 22 contas; o botão de apagar frase
+montava um filtro `.or()` com o rótulo dentro e quebrava com qualquer vírgula
+(existe "Sai daqui, Thor" em produção).
+
+**O que deliberadamente não foi feito:**
+
+- **Enviar aviso de dor forte** (WhatsApp, notificação) — depende de decidir
+  para quem vai, e essa decisão é de quem cuida, não de quem programa.
+- **Apagar as contas sem uso** — são 7, e todas de pessoas reais. Apagar é
+  irreversível e não é uma decisão técnica.
+- **Remover `usage_events.was_ai_enhanced`** — está `false` em 425 de 425
+  desde que a personalização por IA saiu, mas derrubar coluna em produção por
+  motivo cosmético é risco sem ganho. Fica documentado como morto.
+
+**Correção de documentação:** a tabela `phrases` descrita na seção 2 deste
+arquivo **nunca existiu no banco**. Foi desenhada, nunca criada, e o app
+sempre leu a árvore de `src/data/tree.js`. Nenhuma migration a cria.
