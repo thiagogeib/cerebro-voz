@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../../lib/supabase'
+import { TREE } from '../../data/tree'
 
 const PERIODS = [
   { label: '7 dias',  days: 7 },
@@ -11,6 +12,15 @@ function getStartDate(days) {
   const d = new Date()
   d.setDate(d.getDate() - days)
   return d.toISOString()
+}
+
+// Todos os botões da árvore que falam alguma coisa (folhas).
+function todasAsFolhas(nos = [...TREE.basico, ...TREE.intermediario], caminho = [], saida = []) {
+  for (const n of nos) {
+    if (n.filhos) todasAsFolhas(n.filhos, [...caminho, n.l], saida)
+    else if (n.frase) saida.push({ id: n.id, label: n.l, emoji: n.e, onde: caminho.join(' › ') || 'Início' })
+  }
+  return saida
 }
 
 function groupByLabel(events) {
@@ -33,6 +43,8 @@ export default function PhrasesPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [deleting, setDeleting] = useState(null)
+  const [eventosCrus, setEventosCrus] = useState([])
+  const [verNaoUsadas, setVerNaoUsadas] = useState(false)
 
   useEffect(() => {
     async function load() {
@@ -40,7 +52,7 @@ export default function PhrasesPage() {
       setError(null)
       const { data, error: err } = await supabase
         .from('usage_events')
-        .select('phrase_label, emoji, phrase_text')
+        .select('phrase_label, emoji, phrase_text, source, nivel, created_at')
         .gte('created_at', getStartDate(period.days))
       if (err) {
         setError(err.message)
@@ -48,6 +60,7 @@ export default function PhrasesPage() {
         return
       }
       setPhrases(groupByLabel(data ?? []))
+      setEventosCrus(data ?? [])
       setLoading(false)
     }
     load()
@@ -84,6 +97,40 @@ export default function PhrasesPage() {
 
   const maxCount = phrases[0]?.count ?? 1
 
+  // Botões que existem na tela dele e NUNCA foram tocados no período.
+  //
+  // Serve para podar: cada botão que não é usado ocupa espaço e atenção numa
+  // grade que precisa ser rápida de varrer. O cruzamento é pelo rótulo, que é
+  // o que o app grava em `phrase_label`.
+  const usados = new Set(eventosCrus.map(e => e.phrase_label).filter(Boolean))
+  const naoUsadas = todasAsFolhas().filter(f => !usados.has(f.label))
+
+  function baixarCSV() {
+    const linhas = [
+      ['frase', 'rotulo', 'emoji', 'origem', 'nivel', 'quando'],
+      ...eventosCrus.map(e => [
+        e.phrase_text ?? '',
+        e.phrase_label ?? '',
+        e.emoji ?? '',
+        e.source ?? '',
+        e.nivel ?? '',
+        e.created_at ?? '',
+      ]),
+    ]
+    // ; como separador e BOM no começo: é o que o Excel em português abre
+    // direto, sem passar pelo assistente de importação.
+    const csv = '\uFEFF' + linhas
+      .map(l => l.map(c => `"${String(c).replace(/"/g, '""')}"`).join(';'))
+      .join('\r\n')
+
+    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }))
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `vicente-frases-${period.days}dias.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
   return (
     <div>
       <h1 style={s.pageTitle}>Frases mais usadas</h1>
@@ -98,6 +145,10 @@ export default function PhrasesPage() {
             {p.label}
           </button>
         ))}
+
+        <button style={s.btnExportar} onClick={baixarCSV} disabled={!eventosCrus.length}>
+          ⬇ Baixar planilha
+        </button>
       </div>
 
       {loading && <div style={s.stateText}>Carregando...</div>}
@@ -140,11 +191,50 @@ export default function PhrasesPage() {
           ))}
         </div>
       )}
+
+      {/* ── O que NÃO está sendo usado ── */}
+      {!loading && !error && (
+        <div style={s.naoUsadasBox}>
+          <button style={s.naoUsadasTitulo} onClick={() => setVerNaoUsadas(v => !v)}>
+            {verNaoUsadas ? '▾' : '▸'} {naoUsadas.length} bot{naoUsadas.length === 1 ? 'ão' : 'ões'} sem nenhum toque em {period.label}
+          </button>
+
+          {verNaoUsadas && (
+            <>
+              <p style={s.naoUsadasSub}>
+                Estão na tela dele e não foram usados no período. Cada botão a menos
+                é uma tela mais rápida de varrer — vale considerar tirar os que
+                nunca servem. Para editar, veja <code>src/data/tree.js</code>.
+              </p>
+              <div style={s.naoUsadasLista}>
+                {naoUsadas.map(f => (
+                  <div key={f.id} style={s.naoUsadaItem}>
+                    <span style={{ fontSize: 17 }}>{f.emoji}</span>
+                    <span style={s.naoUsadaLabel}>{f.label}</span>
+                    <span style={s.naoUsadaOnde}>{f.onde}</span>
+                  </div>
+                ))}
+                {!naoUsadas.length && (
+                  <div style={s.naoUsadaItem}>Todos os botões foram usados neste período.</div>
+                )}
+              </div>
+            </>
+          )}
+        </div>
+      )}
     </div>
   )
 }
 
 const s = {
+  btnExportar: { marginLeft: 'auto', padding: '7px 14px', borderRadius: 20, border: '1.5px solid #E2D9C8', background: '#FFFDF8', color: '#5B7B6F', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: "'DM Sans',sans-serif" },
+  naoUsadasBox: { marginTop: 20, background: '#FFFDF8', border: '1.5px solid #E2D9C8', borderRadius: 14, padding: 14 },
+  naoUsadasTitulo: { background: 'none', border: 'none', padding: 0, fontSize: 13, fontWeight: 700, color: '#2C2416', cursor: 'pointer', fontFamily: "'DM Sans',sans-serif" },
+  naoUsadasSub: { fontSize: 12, color: '#8A7D6A', margin: '8px 0 12px', lineHeight: 1.5 },
+  naoUsadasLista: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(210px, 1fr))', gap: 8 },
+  naoUsadaItem: { display: 'flex', alignItems: 'center', gap: 8, background: '#F5F0E8', borderRadius: 10, padding: '7px 10px', fontSize: 12 },
+  naoUsadaLabel: { fontWeight: 600, color: '#2C2416' },
+  naoUsadaOnde: { marginLeft: 'auto', fontSize: 10, color: '#8A7D6A' },
   pageTitle: {
     fontSize: 24,
     fontWeight: 700,

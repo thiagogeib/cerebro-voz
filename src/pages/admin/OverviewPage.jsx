@@ -133,6 +133,8 @@ export default function OverviewPage() {
       topFrases: Object.values(porFrase).sort((a, b) => b.total - a.total).slice(0, 8),
       maisAtivo,
       dores: dores.slice(0, 40).reverse(),
+      // Dor 8 ou mais nos ultimos 7 dias: o que merece ser visto hoje.
+      doresAltas: dores.filter(d => d.nivel >= 8 && d.quando >= desde(7)),
       dorMedia: dores.length ? (dores.reduce((s, d) => s + d.nivel, 0) / dores.length).toFixed(1) : null,
     }
   }, [eventos])
@@ -176,6 +178,32 @@ export default function OverviewPage() {
 
       {!carregando && !erro && eventos.length > 0 && (
         <>
+          {/* Dor alta recente sobe para o topo: é a única coisa aqui que pode
+              exigir uma atitude hoje, e estava enterrada no banco. */}
+          {resumo.doresAltas.length > 0 && (
+            <div style={s.alerta}>
+              <span style={{ fontSize: 22 }}>⚠️</span>
+              <div>
+                <div style={s.alertaTitulo}>
+                  {resumo.doresAltas.length === 1
+                    ? 'Ele registrou dor forte'
+                    : `Ele registrou dor forte ${resumo.doresAltas.length} vezes`}
+                </div>
+                <div style={s.alertaTexto}>
+                  {resumo.doresAltas.slice(0, 3).map((d, i) => (
+                    <span key={i}>
+                      {i > 0 && ' · '}
+                      nível <strong>{d.nivel}</strong> em {new Date(d.quando).toLocaleString('pt-BR', {
+                        day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit',
+                      })}
+                    </span>
+                  ))}
+                  {resumo.doresAltas.length > 3 && ` · e mais ${resumo.doresAltas.length - 3}`}
+                </div>
+              </div>
+            </div>
+          )}
+
           <div style={s.cards}>
             <Card titulo="Frases faladas" valor={resumo.total} nota={`${resumo.mediaPorDia} por dia em média`} />
             <Card
@@ -306,6 +334,9 @@ function Secao({ titulo, children }) {
 }
 
 const s = {
+  alerta: { display: 'flex', gap: 12, alignItems: 'center', background: '#FEF3F2', border: '1.5px solid #FECACA', borderRadius: 14, padding: '12px 16px', marginBottom: 16 },
+  alertaTitulo: { fontSize: 14, fontWeight: 700, color: '#991B1B' },
+  alertaTexto: { fontSize: 12, color: '#7F1D1D', marginTop: 2 },
   pageTitle: { fontSize: 24, fontWeight: 700, color: '#2C2416', margin: '0 0 4px', fontFamily: 'Georgia, serif' },
   pageSub: { fontSize: 13, color: '#8A7D6A', marginBottom: 20 },
   filtros: { display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center', marginBottom: 20 },
