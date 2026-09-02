@@ -16,15 +16,47 @@ export default function UsersPage() {
   useEffect(() => {
     async function load() {
       setLoading(true)
+
       const { data, error: err } = await supabase
         .from('profiles')
         .select('*')
         .order('created_at', { ascending: false })
+
       if (err) {
         setError(err.message)
-      } else {
-        setUsers(data ?? [])
+        setLoading(false)
+        return
       }
+
+      // Quantas frases cada um falou.
+      //
+      // Sem isto, a lista é um monte de e-mail igual — e o painel existe para
+      // acompanhar UMA pessoa. Com a contagem, quem de fato usa o app aparece
+      // no topo, e as contas de teste ficam visíveis pelo que são.
+      const { data: eventos } = await supabase
+        .from('usage_events')
+        .select('user_id, created_at')
+        .limit(10000)
+
+      const porUsuario = {}
+      for (const ev of eventos ?? []) {
+        const atual = porUsuario[ev.user_id] || { total: 0, ultimo: null }
+        atual.total++
+        if (!atual.ultimo || ev.created_at > atual.ultimo) atual.ultimo = ev.created_at
+        porUsuario[ev.user_id] = atual
+      }
+
+      const comUso = (data ?? []).map(u => ({
+        ...u,
+        totalFrases: porUsuario[u.id]?.total ?? 0,
+        // O último acesso real é o da última frase falada. A coluna
+        // `last_seen_at` só passou a ser preenchida agora, e o histórico
+        // anterior vive nos eventos.
+        ultimoUso: porUsuario[u.id]?.ultimo ?? u.last_seen_at ?? null,
+      }))
+
+      comUso.sort((a, b) => b.totalFrases - a.totalFrases)
+      setUsers(comUso)
       setLoading(false)
     }
     load()
@@ -33,7 +65,11 @@ export default function UsersPage() {
   return (
     <div>
       <h1 style={s.pageTitle}>Usuários</h1>
-      <p style={s.pageSub}>{users.length} conta{users.length !== 1 ? 's' : ''} cadastrada{users.length !== 1 ? 's' : ''}</p>
+      <p style={s.pageSub}>
+        {users.length} conta{users.length !== 1 ? 's' : ''} cadastrada{users.length !== 1 ? 's' : ''}
+        {' · '}
+        {users.filter(u => u.totalFrases > 0).length} chegaram a falar alguma frase
+      </p>
 
       {loading && <div style={s.stateText}>Carregando...</div>}
 
@@ -46,7 +82,7 @@ export default function UsersPage() {
           <table style={s.table}>
             <thead>
               <tr>
-                {['Email', 'Nome', 'Nível', 'Criado em', 'Último acesso'].map(col => (
+                {['Pessoa', 'Nível', 'Frases faladas', 'Último uso', 'Criado em'].map(col => (
                   <th key={col} style={s.th}>{col}</th>
                 ))}
               </tr>
@@ -58,13 +94,23 @@ export default function UsersPage() {
                 </tr>
               ) : users.map(u => (
                 <tr key={u.id} style={s.tr}>
-                  <td style={s.td}>{u.email ?? '—'}</td>
-                  <td style={s.td}>{u.full_name ?? '—'}</td>
+                  <td style={s.td}>
+                    <div style={{ fontWeight: u.totalFrases > 0 ? 700 : 400 }}>
+                      {u.full_name || u.email || '—'}
+                      {u.role === 'admin' && <span style={s.adminTag}>admin</span>}
+                    </div>
+                    {u.full_name && <div style={s.subEmail}>{u.email}</div>}
+                  </td>
                   <td style={s.td}>
                     <span style={{ ...s.badge, ...nivelColor(u.nivel) }}>{u.nivel ?? '—'}</span>
                   </td>
+                  <td style={s.tdMono}>
+                    {u.totalFrases > 0
+                      ? <strong style={{ color: '#5B7B6F', fontSize: 14 }}>{u.totalFrases}</strong>
+                      : <span style={{ color: '#C9BCA6' }}>nunca falou</span>}
+                  </td>
+                  <td style={s.tdMono}>{formatDate(u.ultimoUso)}</td>
                   <td style={s.tdMono}>{formatDate(u.created_at)}</td>
-                  <td style={s.tdMono}>{formatDate(u.last_seen_at)}</td>
                 </tr>
               ))}
             </tbody>
@@ -155,6 +201,22 @@ const s = {
     fontSize: 11,
     fontWeight: 700,
     textTransform: 'capitalize',
+  },
+  adminTag: {
+    marginLeft: 6,
+    fontSize: 10,
+    fontWeight: 700,
+    color: '#C4956A',
+    background: '#FFF4E6',
+    padding: '2px 7px',
+    borderRadius: 20,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  subEmail: {
+    fontSize: 11,
+    color: '#8A7D6A',
+    marginTop: 2,
   },
   emptyCell: {
     padding: '32px 16px',

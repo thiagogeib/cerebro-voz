@@ -29,8 +29,26 @@ export default function HistoryPage() {
         .from('profiles')
         .select('id, email, full_name')
         .order('email', { ascending: true })
-      setUsers(data ?? [])
+
+      // Quantas frases cada um tem. A lista tem dezenas de contas e quase
+      // todas nunca falaram nada — sem isso, escolher no seletor é às cegas.
+      const { data: eventos } = await supabase
+        .from('usage_events')
+        .select('user_id')
+        .limit(10000)
+
+      const porUsuario = {}
+      for (const ev of eventos ?? []) porUsuario[ev.user_id] = (porUsuario[ev.user_id] || 0) + 1
+
+      const lista = (data ?? [])
+        .map(u => ({ ...u, total: porUsuario[u.id] ?? 0 }))
+        .sort((a, b) => b.total - a.total)
+
+      setUsers(lista)
       setLoadingUsers(false)
+
+      // Já abre em quem mais usa — que é a pessoa a acompanhar.
+      if (lista.length && lista[0].total > 0) setSelectedUser(lista[0].id)
     }
     loadUsers()
   }, [])
@@ -75,7 +93,8 @@ export default function HistoryPage() {
             <option value="">Selecione um usuário...</option>
             {users.map(u => (
               <option key={u.id} value={u.id}>
-                {u.email}{u.full_name ? ` — ${u.full_name}` : ''}
+                {u.full_name || u.email}
+                {u.total > 0 ? ` — ${u.total} frases` : ' — nunca falou'}
               </option>
             ))}
           </select>

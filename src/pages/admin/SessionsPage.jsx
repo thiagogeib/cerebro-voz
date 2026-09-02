@@ -29,14 +29,33 @@ export default function SessionsPage() {
       setLoading(true)
       const { data, error: err } = await supabase
         .from('sessions')
-        .select('*, profiles(email)')
+        .select('*, profiles(email, full_name)')
         .order('started_at', { ascending: false })
         .limit(50)
+
       if (err) {
         setError(err.message)
-      } else {
-        setSessions(data ?? [])
+        setLoading(false)
+        return
       }
+
+      // A coluna `phrase_count` só é preenchida quando o app consegue encerrar
+      // a sessão — e por muito tempo ele não conseguia (ver migration 004).
+      // Contar os eventos ligados a cada sessão dá o número certo, inclusive
+      // para as sessões antigas.
+      const ids = (data ?? []).map(x => x.id)
+      let contagem = {}
+      if (ids.length) {
+        const { data: eventos } = await supabase
+          .from('usage_events')
+          .select('session_id')
+          .in('session_id', ids)
+        for (const ev of eventos ?? []) {
+          contagem[ev.session_id] = (contagem[ev.session_id] || 0) + 1
+        }
+      }
+
+      setSessions((data ?? []).map(x => ({ ...x, frasesReais: contagem[x.id] ?? 0 })))
       setLoading(false)
     }
     load()
@@ -45,7 +64,11 @@ export default function SessionsPage() {
   return (
     <div>
       <h1 style={s.pageTitle}>Sessões</h1>
-      <p style={s.pageSub}>Últimas 50 sessões registradas</p>
+      <p style={s.pageSub}>
+        Últimas 50 vezes que o app foi aberto. "Frases faladas" conta os
+        eventos ligados à sessão — sessões antigas aparecem sem contagem
+        porque o app não conseguia gravar esse vínculo (corrigido em 01/09).
+      </p>
 
       {loading && <div style={s.stateText}>Carregando...</div>}
 
@@ -58,7 +81,7 @@ export default function SessionsPage() {
           <table style={s.table}>
             <thead>
               <tr>
-                {['Email', 'Início', 'Fim', 'Duração', 'Frases', 'Dispositivo', 'Plataforma'].map(col => (
+                {['Pessoa', 'Início', 'Duração', 'Frases faladas', 'Dispositivo', 'Plataforma'].map(col => (
                   <th key={col} style={s.th}>{col}</th>
                 ))}
               </tr>
@@ -66,18 +89,25 @@ export default function SessionsPage() {
             <tbody>
               {sessions.length === 0 ? (
                 <tr>
-                  <td colSpan={7} style={s.emptyCell}>Nenhuma sessão encontrada.</td>
+                  <td colSpan={6} style={s.emptyCell}>Nenhuma sessão encontrada.</td>
                 </tr>
               ) : sessions.map(sess => {
                 const device = sess.device_info ?? {}
                 const isMobile = device.mobile === true
                 return (
                   <tr key={sess.id} style={s.tr}>
-                    <td style={s.td}>{sess.profiles?.email ?? '—'}</td>
+                    <td style={s.td}>{sess.profiles?.full_name || sess.profiles?.email || '—'}</td>
                     <td style={s.tdMono}>{formatDate(sess.started_at)}</td>
-                    <td style={s.tdMono}>{formatDate(sess.ended_at)}</td>
-                    <td style={s.tdMono}>{calcDuration(sess.started_at, sess.ended_at)}</td>
-                    <td style={s.tdCenter}>{sess.phrase_count ?? '—'}</td>
+                    <td style={s.tdMono}>
+                      {sess.ended_at
+                        ? calcDuration(sess.started_at, sess.ended_at)
+                        : <span style={{ color: '#C9BCA6' }}>em aberto</span>}
+                    </td>
+                    <td style={s.tdCenter}>
+                      {sess.frasesReais > 0
+                        ? <strong style={{ color: '#5B7B6F' }}>{sess.frasesReais}</strong>
+                        : <span style={{ color: '#C9BCA6' }}>—</span>}
+                    </td>
                     <td style={s.tdCenter}>
                       <span style={{ ...s.badge, ...(isMobile ? s.badgeMobile : s.badgeDesktop) }}>
                         {isMobile ? '📱 Mobile' : '🖥️ Desktop'}

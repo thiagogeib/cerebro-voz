@@ -56,10 +56,24 @@ export default function PhrasesPage() {
   async function handleDelete(item) {
     if (!window.confirm(`Apagar todos os registros de "${item.label}"?`)) return
     setDeleting(item.label)
-    const { error: err } = await supabase
+
+    // O filtro `.or()` do PostgREST separa condições por vírgula, então um
+    // rótulo que contenha vírgula ou parêntese quebrava a consulta — e isso
+    // acontece de verdade com frases digitadas à mão ("Sai daqui, Thor").
+    // Duas chamadas simples evitam montar essa expressão à mão.
+    const alvo = item.label
+    const { error: err1 } = await supabase
       .from('usage_events')
       .delete()
-      .or(`phrase_label.eq.${item.label},and(phrase_label.is.null,phrase_text.eq.${item.label})`)
+      .eq('phrase_label', alvo)
+
+    const { error: err2 } = await supabase
+      .from('usage_events')
+      .delete()
+      .is('phrase_label', null)
+      .eq('phrase_text', alvo)
+
+    const err = err1 || err2
     setDeleting(null)
     if (err) {
       alert('Erro ao apagar: ' + err.message)

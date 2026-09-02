@@ -1,12 +1,14 @@
 import { useState } from 'react'
 import { Routes, Route, NavLink, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../hooks/useAuth'
+import OverviewPage from './OverviewPage'
 import UsersPage from './UsersPage'
 import PhrasesPage from './PhrasesPage'
 import HistoryPage from './HistoryPage'
 import SessionsPage from './SessionsPage'
 
 const NAV_LINKS = [
+  { to: 'overview', label: 'Visão geral',       icon: '📈' },
   { to: 'users',   label: 'Usuários',          icon: '👥' },
   { to: 'phrases', label: 'Frases mais usadas', icon: '📊' },
   { to: 'history', label: 'Histórico',           icon: '🕐' },
@@ -90,11 +92,12 @@ export default function AdminLayout() {
       {/* Content */}
       <main style={s.content}>
         <Routes>
+          <Route path="overview" element={<OverviewPage />} />
           <Route path="users"    element={<UsersPage />} />
           <Route path="phrases"  element={<PhrasesPage />} />
           <Route path="history"  element={<HistoryPage />} />
           <Route path="sessions" element={<SessionsPage />} />
-          <Route path="*"        element={<UsersPage />} />
+          <Route path="*"        element={<OverviewPage />} />
         </Routes>
       </main>
     </div>
